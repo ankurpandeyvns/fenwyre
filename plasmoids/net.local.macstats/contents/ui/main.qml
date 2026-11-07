@@ -224,6 +224,65 @@ PlasmoidItem {
         }
     }
 
+    // Hover readout for a history graph: cursor line plus a bubble with the values at that sample
+    // (`describe(i)` returns [[name, text, color], ...]); samples are root.intervalMs apart.
+    component HoverReadout: MouseArea {
+        id: hr
+        property int count: 0
+        property var describe: i => []
+        anchors.fill: parent
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        readonly property real step: width / (root.historyLength - 1)
+        readonly property int index: {
+            if (!containsMouse || count < 1) return -1;
+            const x0 = width - (count - 1) * step;
+            return Math.max(0, Math.min(count - 1, Math.round((mouseX - x0) / step)));
+        }
+        readonly property real px: index < 0 ? 0 : width - (count - 1 - index) * step
+        readonly property var rows: index < 0 ? [] : describe(index)
+        Rectangle {
+            visible: hr.index >= 0
+            x: Math.round(Math.min(hr.width - 1, hr.px))
+            width: 1
+            height: hr.height
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+        }
+        Rectangle {
+            visible: hr.index >= 0
+            readonly property real gap: Kirigami.Units.smallSpacing * 2
+            x: hr.px + gap + width <= hr.width ? hr.px + gap : Math.max(0, hr.px - gap - width)
+            y: Kirigami.Units.smallSpacing
+            width: readout.implicitWidth + Kirigami.Units.smallSpacing * 3
+            height: readout.implicitHeight + Kirigami.Units.smallSpacing * 2
+            radius: Kirigami.Units.smallSpacing * 1.5
+            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
+            border.width: 1
+            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+            ColumnLayout {
+                id: readout
+                anchors.centerIn: parent
+                spacing: 0
+                Tiny {
+                    readonly property int secs: Math.round((hr.count - 1 - hr.index) * root.intervalMs / 1000)
+                    text: secs === 0 ? "now" : secs < 60 ? secs + " s ago" : Math.floor(secs / 60) + " min " + (secs % 60) + " s ago"
+                    opacity: 0.6
+                }
+                Repeater {
+                    model: hr.rows
+                    RowLayout {
+                        required property var modelData
+                        spacing: Kirigami.Units.smallSpacing
+                        Rectangle { width: 6; height: 6; radius: 3; color: modelData[2] }
+                        Tiny { text: modelData[0] }
+                        Item { Layout.fillWidth: true; Layout.minimumWidth: Kirigami.Units.smallSpacing }
+                        Tiny { text: modelData[1]; font.weight: Font.DemiBold }
+                    }
+                }
+            }
+        }
+    }
+
     // Donut for the memory composition.
     component Donut: Canvas {
         property var parts: []      // [[value, color], ...]
@@ -520,6 +579,11 @@ PlasmoidItem {
                         anchors.fill: parent; anchors.margins: 1
                         series: [root.hSys, root.hUser]
                         colors: [root.cSys, root.cUser]
+                        HoverReadout {
+                            count: root.hUser.length
+                            describe: i => [["User", (root.hUser[i] || 0).toFixed(0) + "%", root.cUser],
+                                            ["System", (root.hSys[i] || 0).toFixed(0) + "%", root.cSys]]
+                        }
                     }
                 }
                 Section { text: "CORES" }
@@ -577,7 +641,8 @@ PlasmoidItem {
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 4
-                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hMem]; colors: [root.cMem] }
+                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hMem]; colors: [root.cMem]
+                        HoverReadout { count: root.hMem.length; describe: i => [["Memory used", (root.hMem[i] || 0).toFixed(0) + "%", root.cMem]] } }
                 }
                 Row2 { k: "Used"; v: root.d ? root.fmtBytes(root.d.mem.used) + " of " + root.fmtBytes(root.d.mem.total) : "–" }
                 Row2 { k: "Swap (zram)"; v: root.d ? root.fmtBytes(root.d.mem.swapUsed) + " → " + root.fmtBytes(root.d.mem.compressed) : "–" }
@@ -621,7 +686,8 @@ PlasmoidItem {
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 4
-                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hGpu]; colors: [root.cGpu] }
+                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hGpu]; colors: [root.cGpu]
+                        HoverReadout { count: root.hGpu.length; describe: i => [["GPU busy", (root.hGpu[i] || 0).toFixed(0) + "%", root.cGpu]] } }
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -629,6 +695,7 @@ PlasmoidItem {
                         anchors.fill: parent; anchors.margins: 1
                         series: [root.hGpuPower]; colors: [root.cComp]
                         maxValue: Math.max(10, Math.max.apply(null, root.hGpuPower.concat([0])) * 1.15)
+                        HoverReadout { count: root.hGpuPower.length; describe: i => [["GPU power", (root.hGpuPower[i] || 0).toFixed(2) + " W", root.cComp]] }
                     }
                 }
                 Row2 { k: "Frequency"; v: root.g && root.g.mhz !== null ? root.g.mhz + " MHz" + (root.g.maxMhz ? "  of " + root.g.maxMhz : "") : "–" }
@@ -671,7 +738,9 @@ PlasmoidItem {
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 5
-                    NetGraph { id: ng; anchors.fill: parent; anchors.margins: 1; up: root.hTx; down: root.hRx }
+                    NetGraph { id: ng; anchors.fill: parent; anchors.margins: 1; up: root.hTx; down: root.hRx
+                        HoverReadout { count: root.hRx.length
+                            describe: i => [["Upload", root.fmtRate(root.hTx[i] || 0), root.cUp], ["Download", root.fmtRate(root.hRx[i] || 0), root.cDown]] } }
                     PlasmaComponents.Label {
                         anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 3
                         text: root.fmtRate(ng.scaleMax); opacity: 0.45
@@ -719,7 +788,8 @@ PlasmoidItem {
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 3.5
-                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hTemp]; colors: [root.cWired]; maxValue: 105 }
+                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hTemp]; colors: [root.cWired]; maxValue: 105
+                        HoverReadout { count: root.hTemp.length; describe: i => [["CPU temperature", (root.hTemp[i] || 0).toFixed(1) + " °C", root.cWired]] } }
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -727,6 +797,7 @@ PlasmoidItem {
                         anchors.fill: parent; anchors.margins: 1
                         series: [root.hPower]; colors: [root.cComp]
                         maxValue: Math.max(30, Math.max.apply(null, root.hPower.concat([0])) * 1.15)
+                        HoverReadout { count: root.hPower.length; describe: i => [["System power", (root.hPower[i] || 0).toFixed(1) + " W", root.cComp]] }
                     }
                 }
                 Section { text: "FANS" }
