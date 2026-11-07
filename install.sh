@@ -225,7 +225,14 @@ unit_helium() {
     fi
     echo "Restart Helium; verify chrome://media-internals shows kVideoDecoderName = VaapiVideoDecoder"
 }
-unit_mxkeys() { say "Logitech Mac mode"; bin logi-macmode; svc logi-macmode.service; systemctl --user enable --now logi-macmode.service; }
+unit_mxkeys() {
+    say "Logitech Mac mode"; bin logi-macmode; svc logi-macmode.service; systemctl --user enable --now logi-macmode.service;
+    # The MX Keys lock key (Mac mode) sends Ctrl+Cmd+Q, macOS's lock shortcut: add it to Lock Session next to
+    # Meta+L and the Screensaver key. 0x14000051 = Meta+Ctrl+Q (the same after the Cmd/Ctrl swap), 0x10000000|L, Key_ScreenSaver.
+    gdbus call --session --dest org.kde.kglobalaccel --object-path /kglobalaccel --method org.kde.KGlobalAccel.setShortcutKeys \
+        "['ksmserver','Lock Session','Session Management','Lock Session']" \
+        "[([268435532,0,0,0],),([16777402,0,0,0],),([335544401,0,0,0],)]" 6 >/dev/null
+}
 unit_brightness() {
     say "brightness keys for the display under the mouse"
     bin brightness-here brightness-here-repeat; svc brightness-here-repeat.service

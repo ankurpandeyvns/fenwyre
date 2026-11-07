@@ -181,3 +181,9 @@
 - Utilization is busy time at the *current* clock: 56% at 388 MHz (pstate 1 of 1296 MHz) is a small amount of work
   at ~2 W. Hardware video decode (`/dev/video0` = `avd`) only takes the decoding off the GPU; Chromium still uses the
   GPU to convert/scale each frame and composite the page, and KWin composites it again.
+- MX Keys in Mac mode: the lock key sends LEFTMETA+LEFTCTRL+Q (macOS Ctrl+Cmd+Q), not a lock keycode. After the
+  Cmd/Ctrl XKB swap KDE still sees Meta+Ctrl+Q; bind it to ksmserver "Lock Session" (unit_mxkeys).
+- Helium video GPU cost (2026-11-08): 1080p60 H.264 in a ~1400x850 window costs ~5% GPU with avd decode, and
+  `WaylandOverlayDelegation` made no measurable difference (4.8% vs 5.0%), so it is not enabled. A maximized YouTube
+  tab on eDP (3456x2176 px at 120 Hz) cost ~35%; pausing the YouTube renderer halved it, i.e. page work (Ambient mode
+  glow, UI) rather than decoding. KWin's `KWIN_USE_OVERLAYS` (opt-in, needs a new login) is untested on Apple DCP.

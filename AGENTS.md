@@ -95,7 +95,8 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 - **konsole**: new Konsole windows use the Mac profile and the Powerline font.
 - **helium**: restart Helium; `chrome://media-internals` → player → `kVideoDecoderName = VaapiVideoDecoder`, or the
   `--type=gpu-process` process holds `/dev/video*` fds. Don't touch its `--password-store` line (keyring).
-- **mxkeys**: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`.
+- **mxkeys**: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`; the lock key (sends Ctrl+Cmd+Q in Mac mode)
+  locks: `kreadconfig6 --file kglobalshortcutsrc --group ksmserver --key "Lock Session"` lists `Meta+Ctrl+Q`.
 - **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
 - **battery**: `battery-limit` shows the threshold; above it on AC, `charge_behaviour` is `auto-discharge`.
   Fans (same feature, M1 Pro/Max/Ultra on Asahi): `modinfo -n macsmc_hwmon` is under `updates/`, a `macsmc_soc_die`
