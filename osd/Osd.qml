@@ -72,8 +72,8 @@ Window {
             anchors.fill: parent
             radius: height / 2
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.16) }
-                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.08) }
+                GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.07) }
+                GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.02) }
             }
         }
         Rectangle {
