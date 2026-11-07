@@ -349,8 +349,8 @@ PlasmoidItem {
             anchors.left: parent.left
             anchors.leftMargin: Kirigami.Units.smallSpacing
             anchors.verticalCenter: parent.verticalCenter
-            text: compact.collapsed ? "\u2039" : "\u203A"      // ‹ show / › hide
-            font.pixelSize: Math.round(compact.height * 0.62)
+            text: compact.collapsed ? "\u00AB" : "\u00BB"      // « show / » hide
+            font.pixelSize: Math.round(compact.height * 0.9)
             font.weight: Font.DemiBold
             opacity: chevronArea.containsMouse ? 1.0 : 0.7
             MouseArea {
