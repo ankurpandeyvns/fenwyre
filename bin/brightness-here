@@ -2,24 +2,49 @@
 # Change brightness of the display under the mouse only (like macOS + BetterDisplay).
 #   brightness-here up|down [step]
 # KWin's active output follows the mouse (kwinrc [Windows] ActiveMouseScreen, default true).
+#
+# The built-in panel's backlight is linear in nits, so equal raw steps look drastic at the low end.
+# Like macOS, it steps in perceived lightness (CIE L*) instead, via PowerDevil's 0..10000 scale; the
+# HUD shows the perceived level. External monitors (DDC/CI) already use a perceptual scale: raw steps.
 set -uo pipefail
 dir=${1:-up}; step=${2:-${BRIGHTNESS_STEP:-5}}   # percent per key press
-out=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null) || exit 1
+case "$dir" in up|down) ;; *) echo "usage: brightness-here up|down [step]" >&2; exit 2 ;; esac
+out=${BRIGHTNESS_OUTPUT:-$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null)}
 [ -n "$out" ] || exit 1
+
+if [[ $out == eDP* || $out == LVDS* ]]; then
+  SB=org.kde.ScreenBrightness
+  disp=""
+  for d in $(qdbus6 $SB 2>/dev/null | grep '^/org/kde/ScreenBrightness/display'); do
+    [ "$(qdbus6 $SB "$d" org.kde.ScreenBrightness.Display.IsInternal 2>/dev/null)" = true ] && { disp=$d; break; }
+  done
+  [ -n "$disp" ] || exit 1
+  step=${2:-${BRIGHTNESS_STEP_INTERNAL:-2.5}}   # finer steps on the built-in panel (40 from dark to full)
+  max=$(qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.MaxBrightness)
+  cur=$(qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.Brightness)
+  read -r raw level < <(python3 -I -c '
+import sys
+cur, mx, step, up = int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3]), sys.argv[4] == "up"
+def L(y):  # relative luminance 0..1 -> perceived lightness 0..100
+    return 116 * y ** (1 / 3) - 16 if y > 0.008856 else y * 903.3
+def Y(l):
+    return ((l + 16) / 116) ** 3 if l > 8 else l / 903.3
+l = L(cur / mx)
+l = round(l / step) * step if abs(l - round(l / step) * step) < step / 4 else l   # snap onto the step grid
+l = min(100.0, l + step) if up else max(step, l - step)                                # lowest step stays lit
+print(max(1, round(Y(l) * mx)), round(l))
+' "$cur" "$max" "$step" "$dir")
+  qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.SetBrightness "$raw" 1 >/dev/null 2>&1
+  qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$level" >/dev/null 2>&1
+  exit 0
+fi
 
 cur=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$out" '
   /^Output:/ { name = $3 }
   name == o && /Brightness control/ { if (match($0, /set to [0-9]+%/)) { print substr($0, RSTART + 7, RLENGTH - 8); exit } }')
 [ -n "$cur" ] || exit 1
-
-case "$dir" in
-  up)   new=$((cur + step)) ;;
-  down) new=$((cur - step)) ;;
-  *)    echo "usage: brightness-here up|down [step]" >&2; exit 2 ;;
-esac
-min=0; [ "$out" = eDP-1 ] && min=1   # keep the built-in backlight from switching off
+if [ "$dir" = up ]; then new=$((cur + step)); else new=$((cur - step)); fi
 [ "$new" -gt 100 ] && new=100
-[ "$new" -lt "$min" ] && new=$min
-
+[ "$new" -lt 0 ] && new=0
 kscreen-doctor "output.$out.brightness.$new" >/dev/null 2>&1
 qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$new" >/dev/null 2>&1

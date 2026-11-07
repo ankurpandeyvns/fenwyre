@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "net.local.volume",
+    "Name": "Sound (macOS)",
+    "Description": "macOS-style Sound menu bar item: speaker or headphones glyph, volume slider, output picker",
+    "Icon": "audio-volume-high",
+    "Authors": [{ "Name": "local" }],
+    "Version": "1.0",
+    "License": "MIT"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPackageStructure": "Plasma/Applet"
+}

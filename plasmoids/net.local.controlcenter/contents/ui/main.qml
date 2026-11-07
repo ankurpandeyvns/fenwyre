@@ -237,9 +237,11 @@ PlasmoidItem {
     property var pendingBri: ({})
     function setBrightness(d, frac) {
         if (!d) return;
-        const minV = d.internal ? Math.max(1, Math.round(d.maxBri * 0.01)) : 0;
+        // Built-in panel: slider is perceived lightness (CIE L*), like macOS; externals are already perceptual.
+        const lin = d.internal ? lstarToY(frac) : frac;
+        const minV = d.internal ? Math.max(1, Math.round(d.maxBri * 0.0011)) : 0;
         const p = pendingBri;
-        p[d.dname] = Math.max(minV, Math.round(frac * d.maxBri));
+        p[d.dname] = Math.max(minV, Math.round(lin * d.maxBri));
         pendingBri = p;
         briTimer.start();
     }
@@ -252,7 +254,13 @@ PlasmoidItem {
             for (const k in p) sbc.setBrightness(k, p[k]);
         }
     }
-    function briFrac(d) { return d && d.maxBri > 0 ? d.bri / d.maxBri : 0; }
+    function lstarToY(l) { const L = l * 100; return L > 8 ? Math.pow((L + 16) / 116, 3) : L / 903.3; }
+    function yToLstar(y) { return (y > 0.008856 ? 116 * Math.cbrt(y) - 16 : y * 903.3) / 100; }
+    function briFrac(d) {
+        if (!d || d.maxBri <= 0) return 0;
+        const y = d.bri / d.maxBri;
+        return d.internal ? yToLstar(y) : y;
+    }
 
     // Dark Mode (Plasma global theme light/dark pair) and Night Light (KWin)
     readonly property bool darkModeOn: BC.DarkModeControl.darkMode
@@ -279,6 +287,27 @@ PlasmoidItem {
     readonly property real normalVolume: 65536
     readonly property real volFrac: sink ? Math.min(1, sink.volume / normalVolume) : 0
     readonly property bool sinkMuted: sink ? sink.muted : true
+    readonly property bool headphones: isHeadphones(sink)
+    // Headphones = headset/headphone form factor (Bluetooth), or an active headphone port that is
+    // plugged in (Pulse port availability 2 = unavailable).
+    // A device whose only/active port is unavailable (e.g. nothing in the headphone jack): macOS hides it.
+    function unplugged(s) {
+        if (!s) return false;
+        const ports = s.ports || [];
+        if (!ports.length) return false;
+        const p = s.activePortIndex >= 0 && s.activePortIndex < ports.length ? ports[s.activePortIndex] : null;
+        return ports.every(q => q.availability === 2) || (p !== null && p.availability === 2 && ports.length === 1);
+    }
+    function isHeadphones(s) {
+        if (!s) return false;
+        const ff = (s.formFactor || "").toLowerCase();
+        if (["headphone", "headset", "hands-free", "handset"].indexOf(ff) >= 0) return true;
+        const ports = s.ports || [];
+        const p = s.activePortIndex >= 0 && s.activePortIndex < ports.length ? ports[s.activePortIndex] : null;
+        if (!p) return false;
+        const n = ((p.name || "") + " " + (p.description || "")).toLowerCase();
+        return (n.indexOf("headphone") >= 0 || n.indexOf("headset") >= 0) && p.availability !== 2;
+    }
     function setVolume(v) {
         if (!sink) return;
         sink.volume = Math.round(v * normalVolume);
@@ -916,7 +945,7 @@ PlasmoidItem {
                 SliderModule {
                     col: 0; row: 3; cols: 4
                     title: "Sound"
-                    glyph: "speaker"
+                    glyph: root.headphones ? "headphones" : "speaker"
                     value: root.sinkMuted ? 0 : root.volFrac
                     muted: root.sinkMuted
                     onMoved: v => root.setVolume(v)
@@ -1365,7 +1394,7 @@ PlasmoidItem {
                     Layout.bottomMargin: 6
                     Layout.preferredHeight: 24
                     dark: root.dark
-                    glyph: "speaker"
+                    glyph: root.headphones ? "headphones" : "speaker"
                     value: root.sinkMuted ? 0 : root.volFrac
                     muted: root.sinkMuted
                     onMoved: v => root.setVolume(v)
@@ -1375,8 +1404,13 @@ PlasmoidItem {
                     model: sinkModel
                     delegate: ListRow {
                         readonly property var po: model.PulseObject
-                        visible: model.Name !== "auto_null"
-                        glyph: (model.Description || "").toLowerCase().includes("headphone") ? "headphones" : (model.Description || "").toLowerCase().includes("hdmi") ? "display" : "speaker"
+                        visible: model.Name !== "auto_null" && !root.unplugged(po)
+                        glyph: {
+                            const t = ((model.Name || "") + " " + (model.Description || "")).toLowerCase();
+                            const f = (po && po.formFactor || "").toLowerCase();
+                            if (["headphone", "headset", "hands-free", "handset"].indexOf(f) >= 0 || t.includes("headphone") || t.includes("headset")) return "headphones";
+                            return t.includes("hdmi") ? "display" : "speaker";
+                        }
                         active: model.Default === true
                         text: model.Description || model.Name
                         onClicked: if (po) po.default = true

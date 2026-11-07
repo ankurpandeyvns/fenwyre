@@ -19,15 +19,15 @@ touches to `~/kde-pre-mac-backup/`.
 | Look | WhiteSur Plasma style, icons, cursors, window decoration, SF Pro / SF Mono fonts | WhiteSur (upstream), AUR `apple-fonts`, `config/fontconfig` |
 | Light / Dark switch | "macOS Light" / "macOS Dark" global themes that keep the macOS look | `look-and-feel/` |
 | Clear menu bar, glass popups | Nearly clear menu bar (35% black veil keeps white text readable on bright wallpapers; Plasma can't switch the bar to dark text the way macOS does); dock, popups and Spotlight share one glass tint; re-applied at every login | `bin/plasma-sync-glass` |
-| Menu bar right side | Battery, volume, Control Center, "Nov 8  3:04 AM" clock; no tray chevron, no Spotlight icon | `plasma-scripts/mac-layout.js` |
+| Menu bar right side | Battery, Sound (speaker or headphones glyph; menu with slider + output list, unplugged outputs hidden), Control Center, "Nov 8  3:04 AM" clock; no tray chevron, no Spotlight icon | `plasma-scripts/mac-layout.js`, `plasmoids/net.local.volume` |
 | Cmd shortcuts | Cmd/Ctrl swapped in XKB, so Cmd+C/V/W/Q/Space work | `kxkbrc` |
 | Spotlight (Cmd+Space) | Centred translucent search: apps, settings, calculator, unit and currency conversion | `plasmoids/net.local.spotlight` + `qml-blurbehind` |
 | Control Center | Wi-Fi, Bluetooth, VPN, Focus/DND, per-screen brightness, volume + output, Now Playing, keyboard backlight, battery mode | `plasmoids/net.local.controlcenter` |
 | Stats / iStat Menus | Menu-bar CPU/MEM/GPU sparklines, network Mbps, temp, watts; click for graphs, per-app CPU/memory/network, GPU load/clock/power/memory (Asahi `agx_stats`) | `plasmoids/net.local.macstats`, `bin/mac-stats*`, `system/bin/nethogs-feed` |
 | Quick Look (Space) | Space previews in Dolphin and on the desktop, arrow keys move between files, big window | GNOME Sushi + `bin/quicklook`, `bin/sushi-launch`, `bin/desktop-quicklook-patch` |
-| Volume / brightness HUD (27.2) | Clear Liquid Glass capsule under the menu bar, top right, outlined glyph, thin 16-segment bar | `osd/` (+ `qml-blurbehind`) |
+| Volume / brightness HUD (27.2) | Clear Liquid Glass capsule under the menu bar, top right, outlined glyph (headphones when they're the output), thin 16-segment bar | `osd/` (+ `qml-blurbehind`) |
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
-| BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals) | `bin/brightness-here*` |
+| BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals); the built-in panel steps 2.5% in perceived lightness (CIE L*), like macOS, instead of linear nits | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |

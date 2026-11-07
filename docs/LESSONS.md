@@ -70,3 +70,18 @@
   `util1..4`) and `gpu_memory` (`user_resident`, `kernel_resident`). Utilization = Δbusy_ns / Δwall time.
   `pstate` indexes `/sys/firmware/devicetree/base/opp-table-gpu/opp*/opp-hz` (big-endian u64; M1 Max tops out at
   1296 MHz). There is no per-process GPU fdinfo, and `temperature_raw` has no documented scale, so neither is shown.
+
+## Brightness curve (Apple panel)
+- `apple-panel-bl` is linear in nits (0..500). Equal percentage steps look drastic at the bottom
+  (1% → 5% → 10% = 5 → 25 → 50 nits). Step in CIE L* instead: Y = ((L+16)/116)^3 (L > 8), else L/903.3.
+- `kscreen-doctor` brightness is integer percent; PowerDevil's `org.kde.ScreenBrightness` displays take
+  0..10000, fine enough for the low end. `KWin.activeOutputName` follows the mouse — test with an override,
+  not with whatever screen the pointer happens to be on.
+
+## Sound
+- Stock `org.kde.plasma.volume` picks its panel icon with `AudioIcon.forVolume(...)` only (QML compiled into
+  the .so, zstd-compressed); it never shows headphones. Volume keys and the OSD come from plasma-pa's kded
+  `audioshortcutsservice`, so the applet can be replaced safely (`plasmoids/net.local.volume`).
+- Headphones: `sink.formFactor` is `headset`/`headphone` for Bluetooth; for the jack, the active port name has
+  "headphone" and `availability !== 2` (2 = unplugged). The OSD override can import
+  `org.kde.plasma.private.volume` and read `PreferredDevice.sink` itself.

@@ -8,7 +8,7 @@ var out = [];
 var first = true;
 panels().forEach(function (p) {
     if (p.location !== "top") return;
-    ["net.local.macstats", "org.kde.plasma.battery", "org.kde.plasma.volume", "net.local.controlcenter", "net.local.spotlight"].forEach(function (id) {
+    ["net.local.macstats", "org.kde.plasma.battery", "net.local.volume", "net.local.controlcenter", "net.local.spotlight"].forEach(function (id) {
         if (!p.widgets(id).length) { p.addWidget(id); out.push("panel " + p.id + ": added " + id); }
     });
     p.widgets("org.kde.plasma.kickoff").forEach(function (w) {

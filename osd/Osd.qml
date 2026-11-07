@@ -17,6 +17,7 @@ import org.kde.kirigami as Kirigami
 import org.kde.layershell as LayerShell
 import net.local.blur as Blur
 import org.kde.plasma.workspace.osd
+import org.kde.plasma.private.volume as Vol
 
 Window {
     id: win
@@ -49,9 +50,22 @@ Window {
 
     readonly property real fraction: showingProgress && osdMaxValue > 0
         ? Math.max(0, Math.min(1, Number(osdValue) / osdMaxValue)) : 0
+    // Headphones = headset/headphone form factor (Bluetooth), or an active headphone port that is
+    // plugged in (Pulse port availability 2 = unavailable).
+    function isHeadphones(s) {
+        if (!s) return false;
+        const ff = (s.formFactor || "").toLowerCase();
+        if (["headphone", "headset", "hands-free", "handset"].indexOf(ff) >= 0) return true;
+        const ports = s.ports || [];
+        const p = s.activePortIndex >= 0 && s.activePortIndex < ports.length ? ports[s.activePortIndex] : null;
+        if (!p) return false;
+        const n = ((p.name || "") + " " + (p.description || "")).toLowerCase();
+        return (n.indexOf("headphone") >= 0 || n.indexOf("headset") >= 0) && p.availability !== 2;
+    }
+    readonly property bool headphones: isHeadphones(Vol.PreferredDevice.sink)
     readonly property string kind: {
         const i = icon || "";
-        if (i.startsWith("audio-volume")) return "speaker";
+        if (i.startsWith("audio-volume")) return win.headphones ? "headphones" : "speaker";
         if (i.indexOf("keyboard-brightness") >= 0) return "kbd";
         if (i.indexOf("brightness") >= 0 || i.startsWith("video-display")) return "sun";
         return "";
