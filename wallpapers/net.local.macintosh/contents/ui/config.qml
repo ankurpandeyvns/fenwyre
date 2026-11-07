@@ -22,9 +22,9 @@ Kirigami.FormLayout {
     }
     readonly property var colourModel: A.COLOURS.map(function (c) { return { value: c, text: c }; })
     readonly property var appearanceModel: [
-        { value: "Automatic", text: "Automatic (follow colour scheme)" },
         { value: "Light", text: "Light" },
-        { value: "Dark", text: "Dark" }
+        { value: "Dark", text: "Dark (deeper background)" },
+        { value: "Automatic", text: "Automatic (follow colour scheme)" }
     ]
 
     function indexOf(model, v) {
@@ -64,7 +64,7 @@ Kirigami.FormLayout {
             from: 0.25
             to: 2.0
             stepSize: 0.05
-            value: root.cfg_Speed > 0 ? root.cfg_Speed : 1.0
+            value: root.cfg_Speed > 0 ? root.cfg_Speed : 0.75
             onMoved: root.cfg_Speed = value
         }
         QQC2.Label {

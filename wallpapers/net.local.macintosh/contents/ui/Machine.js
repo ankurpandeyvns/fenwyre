@@ -179,12 +179,17 @@ Machine.prototype.animate = function (keys, targets, o, cur, defCurve) {
     var curve = CURVES[o.curve] || CURVES[defCurve] || CURVES.linear;
     if (o.curve && !CURVES[o.curve]) this.log("unknown curve '" + o.curve + "', using " + defCurve);
     var rec = { t0: cur, dur: dur };
+    var cname = CURVES[o.curve] ? o.curve : defCurve;
     for (var i = 0; i < keys.length; ++i) {
         if (dur <= 0) {
             delete this.tweens[keys[i]];
             this.state[keys[i]] = targets[i];
+            this.host.hostTween(keys[i], targets[i], targets[i], cur, 0, "linear");
         } else {
-            this.tweens[keys[i]] = { from: this.valueAt(keys[i], cur), to: targets[i], t0: cur, dur: dur, curve: curve };
+            var from = this.valueAt(keys[i], cur);
+            this.tweens[keys[i]] = { from: from, to: targets[i], t0: cur, dur: dur, curve: curve };
+            // the camera is evaluated on the render thread from these descriptions
+            this.host.hostTween(keys[i], from, targets[i], cur, dur, cname);
         }
     }
     if (o.async) this.named[o.async] = rec;
@@ -243,7 +248,7 @@ Machine.prototype.run = function (st, cur) {
     case "let": {
         var key = a.anyWord();
         if (!a.sym("=")) throw "expected '='";
-        this.setVar(key, a.value());
+        this.setVar(key, a.value(), cur);
         break;
     }
     case "add":
@@ -327,14 +332,17 @@ Machine.prototype.run = function (st, cur) {
     if (a.more()) this.log("line " + st.line + ": ignoring trailing tokens in: " + st.text);
 };
 
-Machine.prototype.setVar = function (key, v) {
+Machine.prototype.setVar = function (key, v, cur) {
     switch (key) {
     case "image":
         this.state.image = String(v);
         this.host.hostSetImage(this.state.image);
         break;
     case "cursor": this.state.cursor = String(v); break;
-    case "ramp": this.state.ramp = String(v); break;
+    case "ramp":
+        this.state.ramp = String(v);
+        this.host.hostRamp(this.state.ramp, cur);
+        break;
     case "scene": this.state.scene = String(v); break;
     default:
         this.log("unknown variable '" + key + "' ignored");

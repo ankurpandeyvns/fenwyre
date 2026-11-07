@@ -85,8 +85,8 @@ how to verify it, and what not to do.
     Plasma scripting: `desktops().forEach(function(d){d.wallpaperPlugin="net.local.macintosh"})`, and set
     `Colour=Spectrum`, `Scene=Cycle` in the `["Wallpaper","net.local.macintosh","General"]` group.
     `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's, byte-identical;
-    `programs/authored/` follow the same style, with extensions marked `// [ext]`). Expect about 11% of
-    one CPU core with three screens animating; it pauses under maximized windows.
+    `programs/authored/` follow the same style, with extensions marked `// [ext]`). Animation runs on the render thread; expect plasmashell at about 21-28% of one core with three
+    screens animating at 60 fps; screens under a maximized window pause.
     Alternative: Smart Video Wallpaper Reborn (`luisbocanegra.smart.video.wallpaper.reborn`) with Apple
     aerials. The macOS 26 manifest is
     `https://configuration.apple.com/configurations/internetservices/aerials/resources-config-26-0.plist`
@@ -95,7 +95,7 @@ how to verify it, and what not to do.
     decoder.
 
 12. **Final check**: no coredumps, no QML errors from `net.local.*` in the journal, plasmashell CPU at idle
-    about 5% with a static wallpaper (the Macintosh wallpaper adds about 11%), and every screenshot reviewed. Report what was verified and what was not.
+    about 5% with a static wallpaper (the Macintosh wallpaper adds about 15-20%), and every screenshot reviewed. Report what was verified and what was not.
 
 ## Machine-specific (decide with the user)
 

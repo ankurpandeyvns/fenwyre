@@ -8,23 +8,29 @@ layout(std140, binding = 0) uniform buf {
     float qt_Opacity;
     vec2 resolution;     // item size (only the aspect ratio matters)
     vec2 sceneSize;      // 512 x 342
-    vec2 center;         // look-at point, image pixels
-    float roll;          // in-plane rotation, radians
-    float tilt;          // plane tilt away from viewer, radians
-    float viewHeight;    // image pixels spanning the screen height at the look-at point
+    float clock;         // program time, seconds
+    vec4 twScale;        // (from, to, t0, duration)
+    vec4 twRoll;
+    vec4 twTilt;
+    vec4 twScrollX;
+    vec4 twScrollY;
+    vec4 curvesA;        // easing ids: scale, roll, tilt, scrollX
+    float curveScrollY;
     float persp;         // tan(vertical fov / 2)
-    vec4 bgTop;
+    vec4 bgTop;          // fixed palette (spectrum = 0)
     vec4 bgBottom;
     vec4 inkColor;
-    vec2 rampDir;        // spectrum hue gradient (screen space, y down)
-    vec2 shadowOffset;   // image pixels
+    float spectrum;      // 1 = background hue cycles
     float hueBase;
-    float hueSpan;
-    float spectrum;      // 1 = rainbow ink
-    float spectrumSat;
-    float spectrumVal;
-    float inkFade;
-    float gap;           // gap between tiles (fraction of a pixel)
+    float hueRate;       // hue turns per clock second
+    float hueOffset;     // per-screen offset
+    float bgDim;         // 1 = light, <1 darker appearance
+    vec2 rampFrom;       // background gradient direction (screen space, y down)
+    vec2 rampTo;
+    float rampT0;
+    float fadeOutStart;  // clock time the program finished (ink fades out)
+    float fadeDur;
+    float gap;
     float shadowAmt;
     float shadowBlur;
 };

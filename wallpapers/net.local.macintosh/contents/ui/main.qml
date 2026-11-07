@@ -9,14 +9,14 @@ WallpaperItem {
         var c = Kirigami.Theme.backgroundColor;
         return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) < 0.5;
     }
-    readonly property string appearance: main.configuration.Appearance || "Automatic"
+    readonly property string appearance: main.configuration.Appearance || "Light"
 
     MacintoshView {
         id: view
         anchors.fill: parent
         scene: main.configuration.Scene || "Cycle"
         colour: main.configuration.Colour || "Spectrum"
-        speed: main.configuration.Speed > 0 ? main.configuration.Speed : 1.0
+        speed: main.configuration.Speed > 0 ? main.configuration.Speed : 0.75
         dark: main.appearance === "Dark" || (main.appearance === "Automatic" && main.darkTheme)
         accent: Kirigami.Theme.highlightColor
         // Spectrum differs per screen: offset the hue by the screen's position.

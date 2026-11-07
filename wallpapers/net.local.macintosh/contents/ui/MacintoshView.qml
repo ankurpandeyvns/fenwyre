@@ -27,12 +27,7 @@ Item {
     property var machine: null
     property string currentProgram: ""
     property string imageName: ""
-    property real fade: 0
-    property int fadeDir: 1
-    property real wall: 0
     property string randomColour: "Blue"
-    property real rampX: 0
-    property real rampY: 0
     property string cursorName: ""
     property int cursorX: 0
     property int cursorY: 0
@@ -40,8 +35,19 @@ Item {
     property var pendingPaint: []
     property bool clearPaintPending: false
     readonly property bool loaded: programNames.length > 0
-    readonly property var pal: A.palette(colour === "Random" ? randomColour : colour, dark,
+    readonly property var pal: A.palette(colour === "Random" ? randomColour : colour, false,
                                          [accent.r * 255, accent.g * 255, accent.b * 255])
+    readonly property bool shouldRun: visible && loaded && !paused
+
+    // Program clock: the shader's copy is advanced on the render thread by clockAnim;
+    // the interpreter derives the same time from the wall clock.
+    property real clockBase: 0
+    property double wallBase: 0
+    property bool clockRunning: false
+    property real fadeOutAt: 1e9
+    readonly property real fadeDur: 0.6 * Math.max(0.05, speed)
+    property var curveIds: [3, 3, 3, 0, 0]
+    property int clockMinute: -1        // minutes since midnight, drives the analog clock faces
 
     signal frameRendered()
 
@@ -66,8 +72,71 @@ Item {
         cursorName = name; cursorX = x; cursorY = y; cursorFrame = frame;
     }
     function hostProgramDone() {
-        fadeDir = -1;
+        if (fadeOutAt < 1e8) return;
+        fadeOutAt = now();
+        plane.fadeOutStart = fadeOutAt;
     }
+    readonly property var curveMap: ({ linear: 0, easein: 1, easeout: 2, easeinout: 3 })
+    function hostTween(key, from, to, t0, dur, curve) {
+        var v = Qt.vector4d(from, to, t0, dur);
+        var c = curveMap[curve] !== undefined ? curveMap[curve] : 0;
+        var ids = curveIds.slice();
+        switch (key) {
+        case "scale": plane.twScale = v; ids[0] = c; break;
+        case "roll": plane.twRoll = v; ids[1] = c; break;
+        case "tilt": plane.twTilt = v; ids[2] = c; break;
+        case "scrollX": plane.twScrollX = v; ids[3] = c; break;
+        case "scrollY": plane.twScrollY = v; ids[4] = c; break;
+        default: return;
+        }
+        curveIds = ids;
+        plane.curvesA = Qt.vector4d(ids[0], ids[1], ids[2], ids[3]);
+        plane.curveScrollY = ids[4];
+    }
+    function rampVec(name) {
+        switch (name) {
+        case "Right": return Qt.point(1, 0);
+        case "Left": return Qt.point(-1, 0);
+        case "Up": return Qt.point(0, -1);
+        case "Down": return Qt.point(0, 1);
+        }
+        return Qt.point(0, 0);
+    }
+    function hostRamp(name, t) {
+        // start a cross-fade from whatever gradient is showing to the new one
+        var k = Math.max(0, Math.min(1, (t - plane.rampT0) / 2.5));
+        k = k * k * (3 - 2 * k);
+        var showingTo = k > 0.5;
+        plane.rampFrom = showingTo ? plane.rampTo : plane.rampFrom;
+        plane.rampTo = rampVec(name);
+        plane.rampT0 = t;
+    }
+
+    // ------------------------------------------------------------------ clock
+    function now() {
+        return clockRunning ? clockBase + speed * (Date.now() - wallBase) / 1000 : clockBase;
+    }
+    function setClock(t, run) {
+        var cur = now();
+        var newRate = 1 / (600 * Math.max(0.05, speed));       // one hue turn per 10 minutes
+        var hb = plane.hueBase + cur * plane.hueRate - t * newRate;
+        plane.hueBase = hb - Math.floor(hb);
+        plane.hueRate = newRate;
+        clockAnim.stop();
+        clockBase = t;
+        wallBase = Date.now();
+        clockRunning = run;
+        plane.clock = t;
+        if (run) {
+            clockAnim.from = t;
+            clockAnim.to = t + 100000 * speed;
+            clockAnim.duration = 100000000;
+            clockAnim.start();
+        }
+    }
+    onShouldRunChanged: setClock(now(), shouldRun)
+    onSpeedChanged: if (loaded) setClock(now(), shouldRun)
+
 
     // ------------------------------------------------------------------ program management
     P5Support.DataSource {
@@ -136,59 +205,44 @@ Item {
             randomColour = c[Math.floor(Math.random() * c.length)];
         }
         currentProgram = name;
+        // reset the camera tweens and gradient to a neutral state, restart the clock at 0
+        setClock(0, shouldRun);
+        fadeOutAt = 1e9;
+        plane.fadeOutStart = 1e9;
+        hostTween("scale", 0, 0, 0, 0, "linear");
+        hostTween("roll", 0, 0, 0, 0, "linear");
+        hostTween("tilt", 0, 0, 0, 0, "linear");
+        hostTween("scrollX", 256, 256, 0, 0, "linear");
+        hostTween("scrollY", 171, 171, 0, 0, "linear");
+        plane.rampFrom = plane.rampTo;
+        plane.rampTo = plane.rampFrom;
+        plane.rampT0 = -100;
         machine = new M.Machine(view, programs[name]);
         machine.step(0);
-        fadeDir = 1;
     }
 
-    onSceneChanged: if (loaded) fadeDir = -1
+    onSceneChanged: if (loaded) hostProgramDone()
 
-    // ------------------------------------------------------------------ per-frame update
-    FrameAnimation {
-        // keep running until the first fade-in completes so a covered screen still has a frame
-        running: view.visible && view.loaded && (!view.paused || view.fade < 1)
-        onTriggered: view.advance(Math.min(frameTime, 0.1))
+    // ------------------------------------------------------------------ interpreter tick
+    // Runs on the GUI thread only to advance the script, animate sprites and move the
+    // simulated mouse; camera motion is computed on the render thread (see plane).
+    Timer {
+        interval: 33
+        repeat: true
+        running: view.clockRunning && view.machine !== null
+        onTriggered: view.tick()
     }
 
-    function advance(dt) {
-        wall += dt;
+    function tick() {
         if (!machine) return;
-        if (fadeDir < 0) {
-            fade = Math.max(0, fade - dt / 0.6);
-            if (fade <= 0) startNext();
-        } else if (fade < 1) {
-            fade = Math.min(1, fade + dt / 0.6);
+        var d = new Date(), cm = d.getHours() * 60 + d.getMinutes();
+        if (cm !== clockMinute) clockMinute = cm;
+        var t = now();
+        if (fadeOutAt < 1e8 && t >= fadeOutAt + fadeDur) {
+            startNext();
+            return;
         }
-        if (fadeDir >= 0) machine.step(dt * speed);
-        updateView(dt);
-    }
-
-    function updateView(dt) {
-        var s = machine.state;
-        var e = Math.max(0, Math.min(1, s.scale));
-        var aspect = width / Math.max(1, height);
-        var outH = Math.min(342, 512 / aspect);      // whole screen image, cover-fit
-        var inH = 116 / Math.max(aspect, 1.0);         // ~116 image px across the long edge
-        var vh = Math.exp(Math.log(outH) * (1 - e) + Math.log(inH) * e);
-        var roll = -s.roll * e * Math.PI / 180;   // Apple: camera -22.5 => rows rise to the right
-        plane.center = Qt.point(256 + (s.scrollX - 256) * e, 171 + (s.scrollY - 171) * e);
-        plane.viewHeight = vh;
-        plane.roll = roll;
-        plane.tilt = Math.abs(s.tilt) * e * Math.PI / 180;
-        plane.shadowOffset = Qt.point(0.3 * Math.sin(roll), 0.3 * Math.cos(roll));
-        var tx = 0, ty = 0;
-        switch (s.ramp) {
-        case "Right": tx = 1; break;
-        case "Left": tx = -1; break;
-        case "Up": ty = -1; break;
-        case "Down": ty = 1; break;
-        }
-        var k = Math.min(1, dt * 0.8);
-        rampX += (tx - rampX) * k;
-        rampY += (ty - rampY) * k;
-        plane.rampDir = Qt.point(rampX, rampY);
-        plane.hueBase = wall / 150 + hueOffset;
-        plane.inkFade = fade;
+        if (!machine.done) machine.step(t - machine.t);
         frameRendered();
     }
 
@@ -283,6 +337,31 @@ Item {
                 }
             }
         }
+        Repeater { // analog clock faces in the scene image show the current time
+            model: A.CLOCK_FACES[view.imageName] || []
+            delegate: Canvas {
+                required property var modelData
+                readonly property int rad: Math.ceil(modelData.r)
+                x: modelData.x - rad
+                y: modelData.y - rad
+                width: 2 * rad + 1
+                height: 2 * rad + 1
+                smooth: false
+                antialiasing: false
+                readonly property int minuteOfDay: view.clockMinute
+                onMinuteOfDayChanged: requestPaint()
+                onPaint: {
+                    var ctx = getContext("2d");
+                    ctx.clearRect(0, 0, width, height);
+                    var m = minuteOfDay < 0 ? 0 : minuteOfDay;
+                    var px = A.clockPixels(modelData, Math.floor(m / 60), m % 60);
+                    for (var i = 0; i < px.length; ++i) {
+                        ctx.fillStyle = px[i][2] ? "black" : "white";
+                        ctx.fillRect(px[i][0], px[i][1], 1, 1);
+                    }
+                }
+            }
+        }
         Item { // the simulated mouse cursor
             visible: view.cursorName !== ""
             x: view.cursorX
@@ -318,6 +397,16 @@ Item {
         }
     }
 
+    UniformAnimator {
+        id: clockAnim
+        target: plane
+        uniform: "clock"
+        from: 0
+        to: 100000
+        duration: 100000000
+        onFinished: if (view.clockRunning) view.setClock(view.now(), true)
+    }
+
     ShaderEffectSource {
         id: compositeSrc
         sourceItem: composite
@@ -342,24 +431,31 @@ Item {
         property variant invertMask: invertSrc
         property size resolution: Qt.size(width, height)
         property point sceneSize: Qt.point(512, 342)
-        property point center: Qt.point(256, 171)
-        property real roll: 0
-        property real tilt: 0
-        property real viewHeight: 342
+        property real clock: 0
+        property vector4d twScale: Qt.vector4d(0, 0, 0, 0)
+        property vector4d twRoll: Qt.vector4d(0, 0, 0, 0)
+        property vector4d twTilt: Qt.vector4d(0, 0, 0, 0)
+        property vector4d twScrollX: Qt.vector4d(256, 256, 0, 0)
+        property vector4d twScrollY: Qt.vector4d(171, 171, 0, 0)
+        property vector4d curvesA: Qt.vector4d(3, 3, 3, 0)
+        property real curveScrollY: 0
         property real persp: 0.3
         property vector4d bgTop: Qt.vector4d(view.pal.top[0], view.pal.top[1], view.pal.top[2], 1)
         property vector4d bgBottom: Qt.vector4d(view.pal.bottom[0], view.pal.bottom[1], view.pal.bottom[2], 1)
-        property vector4d inkColor: Qt.vector4d(view.pal.ink[0], view.pal.ink[1], view.pal.ink[2], 1)
-        property point rampDir: Qt.point(0, 0)
-        property point shadowOffset: Qt.point(0, 0.3)
-        property real hueBase: 0
-        property real hueSpan: 0.6
-        property real spectrum: view.pal.spectrum ? 1 : 0
-        property real spectrumSat: view.pal.sat
-        property real spectrumVal: view.pal.val
-        property real inkFade: 0
+        // Classic Mac look: the 1-bit "black" pixels are drawn black on the coloured plane.
+        property vector4d inkColor: Qt.vector4d(0.02, 0.02, 0.025, 0.96)
+        property real spectrum: view.colour === "Spectrum" ? 1 : 0
+        property real hueBase: Math.random()
+        property real hueRate: 1 / 150
+        property real hueOffset: view.hueOffset
+        property real bgDim: view.dark ? 0.55 : 1.0
+        property point rampFrom: Qt.point(0, 0)
+        property point rampTo: Qt.point(0, 0)
+        property real rampT0: -100
+        property real fadeOutStart: 1e9
+        property real fadeDur: view.fadeDur
         property real gap: 0.14
-        property real shadowAmt: view.pal.shadow
+        property real shadowAmt: 0.22
         property real shadowBlur: 0.45
         vertexShader: Qt.resolvedUrl("../shaders/plane.vert.qsb")
         fragmentShader: Qt.resolvedUrl("../shaders/plane.frag.qsb")

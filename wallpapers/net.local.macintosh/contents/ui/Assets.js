@@ -112,3 +112,34 @@ function palette(colour, dark, accentRgb) {
     }
     return { top: n(p.top), bottom: n(p.bottom), ink: n(p.ink), spectrum: false, shadow: 0.2, sat: 0, val: 0 };
 }
+
+// Analog clock faces drawn in the scene images. Their hands are redrawn with the
+// current time: (x,y) centre pixel, r = radius of the face interior that is cleared,
+// m / h = minute / hour hand lengths (image pixels).
+var CLOCK_FACES = {
+    System6ControlPanel: [ { x: 311, y: 154, r: 6.6, m: 6, h: 4 } ],
+    IconGarden: [ { x: 299, y: 245, r: 4.6, m: 4, h: 3 } ]
+};
+
+// Pixels for one clock face: [[x, y, ink], ...] relative to the face bounding box origin.
+function clockPixels(face, hours, minutes) {
+    var R = Math.ceil(face.r), out = [], x, y;
+    for (y = -R; y <= R; ++y)
+        for (x = -R; x <= R; ++x)
+            if (x * x + y * y <= face.r * face.r) out.push([x + R, y + R, 0]);
+    function hand(len, ang) {
+        var x1 = Math.round(len * Math.sin(ang)), y1 = Math.round(-len * Math.cos(ang));
+        var x0 = 0, y0 = 0, dx = Math.abs(x1), dy = -Math.abs(y1);
+        var sx = x1 > 0 ? 1 : -1, sy = y1 > 0 ? 1 : -1, err = dx + dy;
+        for (var n = 0; n < 64; ++n) {
+            out.push([x0 + R, y0 + R, 1]);
+            if (x0 === x1 && y0 === y1) break;
+            var e2 = 2 * err;
+            if (e2 >= dy) { err += dy; x0 += sx; }
+            if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+    hand(face.h, ((hours % 12) + minutes / 60) / 12 * 2 * Math.PI);
+    hand(face.m, minutes / 60 * 2 * Math.PI);
+    return out;
+}

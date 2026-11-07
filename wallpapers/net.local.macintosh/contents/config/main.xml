@@ -14,12 +14,12 @@
       <default>Spectrum</default>
     </entry>
     <entry name="Appearance" type="String">
-      <label>Automatic (follow the colour scheme), Light or Dark</label>
-      <default>Automatic</default>
+      <label>Light (bright colour) or Dark (deeper shade); Automatic follows the colour scheme</label>
+      <default>Light</default>
     </entry>
     <entry name="Speed" type="Double">
-      <label>Playback speed multiplier</label>
-      <default>1.0</default>
+      <label>Playback speed multiplier (1.0 = Apple's script timings)</label>
+      <default>0.75</default>
     </entry>
     <entry name="PauseWhenCovered" type="Bool">
       <label>Stop animating while a maximized or full-screen window is on this screen</label>
