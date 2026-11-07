@@ -109,29 +109,6 @@ step_settings() {
     balooctl6 disable >/dev/null 2>&1 || true
 }
 
-step_power() {
-    say "macOS laptop lock/sleep defaults"
-    backup "$HOME/.config/powerdevilrc"; backup "$HOME/.config/kscreenlockerrc"
-    local g dim off
-    for g in AC Battery LowBattery; do
-        if [ $g = AC ]; then dim=540; off=600; else dim=90; off=120; fi   # display off: 10 min on power, 2 min on battery
-        kw --file powerdevilrc --group $g --group Display --key DimDisplayWhenIdle true
-        kw --file powerdevilrc --group $g --group Display --key DimDisplayIdleTimeoutSec $dim
-        kw --file powerdevilrc --group $g --group Display --key TurnOffDisplayWhenIdle true
-        kw --file powerdevilrc --group $g --group Display --key TurnOffDisplayIdleTimeoutSec $off
-        kw --file powerdevilrc --group $g --group Display --key TurnOffDisplayIdleTimeoutWhenLockedSec $off
-        kw --file powerdevilrc --group $g --group Display --key LockBeforeTurnOffDisplay true     # password immediately
-        kw --file powerdevilrc --group $g --group SuspendAndShutdown --key LidAction 1            # lid = sleep
-        kw --file powerdevilrc --group $g --group SuspendAndShutdown --key InhibitLidActionWhenExternalMonitorPresent true  # clamshell
-        kw --file powerdevilrc --group $g --group SuspendAndShutdown --key PowerButtonAction 32   # power/Touch ID key = lock
-        if [ $g = AC ]; then kw --file powerdevilrc --group $g --group SuspendAndShutdown --key AutoSuspendAction 0
-        else kw --file powerdevilrc --group $g --group SuspendAndShutdown --key AutoSuspendAction 1
-             kw --file powerdevilrc --group $g --group SuspendAndShutdown --key AutoSuspendIdleTimeoutSec 180; fi
-    done
-    for kv in Autolock=true Timeout=10 LockOnResume=true LockGrace=0; do
-        kw --file kscreenlockerrc --group Daemon --key "${kv%%=*}" "${kv#*=}"; done
-}
-
 step_shortcuts() {
     say "global shortcuts (Ctrl below = physical Cmd after the swap; Meta = physical Ctrl)"
     python3 - <<'EOF'
@@ -181,7 +158,7 @@ step_system() {
     sudo systemctl enable --now battery-limit.service nethogs-feed.service
 }
 
-ALL=(bin plasmoids blur osd files services settings power shortcuts layout restart)
+ALL=(bin plasmoids blur osd files services settings shortcuts layout restart)
 case "${1:-all}" in
     list) echo "user steps: ${ALL[*]}   extra: deps system" ;;
     all) for s in "${ALL[@]}"; do "step_$s"; done ;;
