@@ -71,6 +71,8 @@ step_files() {
     put "$HERE/config/kio-servicemenus/quicklook.desktop" "$HOME/.local/share/kio/servicemenus/quicklook.desktop" 755
     for f in "$HERE"/config/konsole/*; do put "$f" "$HOME/.local/share/konsole/$(basename "$f")"; done
     for f in "$HERE"/config/wireplumber/*.conf; do put "$f" "$HOME/.config/wireplumber/wireplumber.conf.d/$(basename "$f")"; done
+    # Sony headphone EQ: only if that headset has been paired here (the filter targets its node name)
+    for f in "$HERE"/config/pipewire/*.conf; do put "$f" "$HOME/.config/pipewire/pipewire.conf.d/$(basename "$f")"; done
     kbuildsycoca6 >/dev/null 2>&1 || true
 }
 

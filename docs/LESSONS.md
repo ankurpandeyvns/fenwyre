@@ -92,3 +92,8 @@
 - WirePlumber remembers the chosen card profile/codec in `~/.local/state/wireplumber/default-profile`.
 - Before restarting WirePlumber, mute the built-in speakers: the Bluetooth sink vanishes for a few seconds and
   playback falls back to the speakers.
+- Per-headphone EQ without an app: PipeWire `filter-chain` with `filter.smart = true` and
+  `filter.smart.target = { node.name = "bluez_output.<MAC>.1" }` in `capture.props`. WirePlumber inserts it in
+  front of that sink only, the sink stays the default (hardware volume intact), and it disappears when the
+  headset does. Give it headroom (preamp `linear` Mult < 1) before boosting, or the encoder clips.
+  Its `effect_input.*` sink still shows in `SinkModel`: filter it out of output pickers.

@@ -1404,7 +1404,7 @@ PlasmoidItem {
                     model: sinkModel
                     delegate: ListRow {
                         readonly property var po: model.PulseObject
-                        visible: model.Name !== "auto_null" && !root.unplugged(po)
+                        visible: model.Name !== "auto_null" && !(model.Name || "").startsWith("effect_input.") && !root.unplugged(po)
                         glyph: {
                             const t = ((model.Name || "") + " " + (model.Description || "")).toLowerCase();
                             const f = (po && po.formFactor || "").toLowerCase();

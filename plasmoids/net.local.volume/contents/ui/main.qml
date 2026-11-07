@@ -170,7 +170,7 @@ PlasmoidItem {
                     id: row
                     readonly property var po: model.PulseObject
                     readonly property bool active: model.Default === true
-                    visible: model.Name !== "auto_null" && !root.unplugged(po)
+                    visible: model.Name !== "auto_null" && !(model.Name || "").startsWith("effect_input.") && !root.unplugged(po)
                     Layout.fillWidth: true
                     implicitHeight: 36
                     radius: 7
