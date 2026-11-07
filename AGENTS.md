@@ -95,7 +95,7 @@ how to verify it, and what not to do.
     decoder.
 
 12. **Final check**: no coredumps, no QML errors from `net.local.*` in the journal, plasmashell CPU at idle
-    under 2%, and every screenshot reviewed. Report what was verified and what was not.
+    about 5% with a static wallpaper (the Macintosh wallpaper adds about 11%), and every screenshot reviewed. Report what was verified and what was not.
 
 ## Machine-specific (decide with the user)
 
