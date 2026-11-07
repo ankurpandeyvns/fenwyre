@@ -123,3 +123,14 @@
   `apply` de-duplicates units and runs them in one fixed order (layout and plasmashell restart last).
 - 4 groups x 4 features matches AskUserQuestion's limits (4 questions, 4 options each). Keep it that way when
   adding features, or split into a second call.
+
+## Login screen (SDDM)
+- SDDM's greeter runs its own KWin as user `sddm`, with its own `/var/lib/sddm/.config/kwinoutputconfig.json`, so
+  rotation/scale/primary from your session don't apply there. Copy yours over (what System Settings' "Apply Plasma
+  Settings" does).
+- SDDM shows the theme on every screen; the stock Breeze form appears on all of them. The `breeze-mac` copy shows it on
+  `theme.conf primaryOutput` only (falls back to SDDM's `primaryScreen`).
+- To hide sessions without uninstalling them (Hyprland/Omarchy), point `[Wayland] SessionDir` at a directory holding
+  only a symlink to `plasma.desktop`. The greeter logs which session files it read.
+- Autologin hides the greeter at boot; you only see it after logging out.
+

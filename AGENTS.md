@@ -79,6 +79,10 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   The wallpaper: `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's,
   byte-identical; `programs/authored/` follow the same style, extensions marked `// [ext]`). Expect plasmashell at
   ~21-28% of one core with three screens animating; screens under a maximized window pause; static after unlock.
+  Login screen (`loginscreen` unit, sudo): verify `sddm-greeter-qt6 --test-mode --theme
+  /usr/share/sddm/themes/breeze-mac` with `QT_QPA_PLATFORM=offscreen` logs only `plasma.desktop` and no QML errors
+  (`journalctl --since -1min _COMM=sddm-greeter-qt6`); on the next logout the form is on the main display only and
+  rotated monitors are rotated.
 - **hud**: verify `qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.volumeChanged 40 100`, then
   screenshot the screen under the mouse within 1 s (the HUD follows the active screen).
 - **cmdkeys**: verify with a real key event: a synthetic KEY_LEFTMETA+Space must open Spotlight and

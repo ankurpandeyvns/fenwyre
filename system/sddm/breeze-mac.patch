@@ -1,0 +1,53 @@
+--- breeze/Main.qml
++++ breeze-mac/Main.qml
+@@ -32,6 +32,17 @@
+ 
+     property string notificationMessage
+ 
++    // kde-macos-parity: like macOS, the login form appears on the main display only; the other
++    // screens show the wallpaper. theme.conf primaryOutput names it (KWin connector name); if that
++    // output isn't connected, SDDM's primary screen is used.
++    readonly property bool isMainScreen: {
++        const want = config.primaryOutput || "";
++        const names = [];
++        for (let i = 0; i < Qt.application.screens.length; i++) names.push(Qt.application.screens[i].name);
++        if (want !== "" && names.indexOf(want) >= 0) return Screen.name === want;
++        return typeof primaryScreen === "undefined" ? true : primaryScreen;
++    }
++
+     LayoutMirroring.enabled: Application.layoutDirection === Qt.RightToLeft
+     LayoutMirroring.childrenInherit: true
+ 
+@@ -63,6 +74,8 @@
+     MouseArea {
+         id: loginScreenRoot
+         anchors.fill: parent
++        visible: root.isMainScreen
++        enabled: root.isMainScreen
+ 
+         property bool uiVisible: true
+         property bool blockUI: mainStack.depth > 1 || userListComponent.mainPasswordBox.text.length > 0 || Keyboards.KWinVirtualKeyboard.visible || config.type !== "image"
+--- breeze/metadata.desktop
++++ breeze-mac/metadata.desktop
+@@ -1,5 +1,5 @@
+ [SddmGreeterTheme]
+-Name=Breeze
++Name=Breeze (macOS parity)
+ Name[ar]=نسيم
+ Name[az]=Breeze
+ Name[be]=Breeze
+@@ -116,6 +116,6 @@
+ ConfigFile=theme.conf
+ TranslationsDirectory=translations
+ Email=plasma-devel@kde.org
+-Theme-Id=breeze
++Theme-Id=breeze-mac
+ Theme-API=2.0
+ QtVersion=6
+--- breeze/theme.conf
++++ breeze-mac/theme.conf
+@@ -7,3 +7,4 @@
+ fontSize=10
+ background=/usr/share/wallpapers/Next/contents/images/5120x2880.png
+ needsFullUserModel=false
++primaryOutput=HDMI-A-1

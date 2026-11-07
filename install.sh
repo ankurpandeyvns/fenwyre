@@ -31,7 +31,7 @@ svc() { for f in "$@"; do put "$HERE/systemd/user/$f" "$HOME/.config/systemd/use
 FEATURES='
 themes|Look|macOS themes + glass|Light/Dark global themes that keep the macOS look, traffic lights on the left, one glass tint for bar, popups and Spotlight|no
 menubar|Look|macOS menu bar|Mac Stats (CPU/MEM/GPU/net), battery, Sound (headphones-aware), Control Center, "Nov 8  3:04 AM" clock, no tray chevron|no
-lockscreen|Look|Live wallpaper + lock screen|Macintosh live wallpaper on desktop and lock screen, glass stencil clock, unlock eases into the desktop (next login)|no
+lockscreen|Look|Live wallpaper + lock screen|Macintosh live wallpaper on desktop and lock screen, glass stencil clock, unlock eases into the desktop (next login); SDDM login form on the main display only, monitor layout synced, only Plasma offered|yes
 hud|Look|Volume/brightness HUD|macOS 27.2 glass capsule under the menu bar, outlined glyph, 16-segment level|no
 cmdkeys|Keyboard|Cmd/Ctrl swap|Cmd+C/V/W/Q/Tab work like macOS (XKB swap of Super and Ctrl)|no
 spotlight|Keyboard|Spotlight (Cmd+Space)|Centred translucent search for apps, settings, calculator, conversions; Baloo indexing off|no
@@ -50,7 +50,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
     case $1 in
         themes)      echo packages themesettings glass restart ;;
         menubar)     echo bin_stats packages blur volume_sound glass layout restart ;;
-        lockscreen)  echo packages lockscreen lockwallpaper ;;
+        lockscreen)  echo packages lockscreen lockwallpaper loginscreen ;;
         hud)         echo blur osd restart ;;
         cmdkeys)     echo cmdswap ;;
         spotlight)   echo packages blur krunner layout restart ;;
@@ -68,7 +68,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
     esac
 }
 # Execution order for units (shared pieces first, panel layout and plasmashell restart last).
-ORDER=(packages bin_stats blur osd volume_sound lockscreen lockwallpaper themesettings glass cmdswap krunner shots
+ORDER=(packages bin_stats blur osd volume_sound lockscreen lockwallpaper loginscreen themesettings glass cmdswap krunner shots
        quicklook konsole helium mxkeys brightness audio windows battery netfeed sffont layout restart)
 
 # ------------------------------------------------------------------ units
@@ -114,6 +114,24 @@ unit_lockscreen() {
     put "$HERE/systemd/user/plasma-kwin_wayland.service.d/macos-lockscreen.conf" \
         "$HOME/.config/systemd/user/plasma-kwin_wayland.service.d/macos-lockscreen.conf"
     systemctl --user daemon-reload
+}
+unit_loginscreen() {
+    say "root: SDDM login screen (Breeze copy: form on the main display, your monitor layout, Plasma only)"
+    local t; t=$(mktemp -d)
+    cp -a /usr/share/sddm/themes/breeze "$t/breeze-mac" && patch -s -d "$t/breeze-mac" -p1 < "$HERE/system/sddm/breeze-mac.patch"
+    # main display = your priority-1 output (System Settings > Display > Primary)
+    local main; main=$(python3 -I -c 'import json,sys
+d={e["name"]:e["data"] for e in json.load(open(sys.argv[1]))}
+s=d["setups"][0]["outputs"]; o=min(s,key=lambda x:x["priority"])
+print(d["outputs"][o["outputIndex"]].get("connectorName",""))' "$HOME/.config/kwinoutputconfig.json" 2>/dev/null || true)
+    [ -n "$main" ] && sed -i "s/^primaryOutput=.*/primaryOutput=$main/" "$t/breeze-mac/theme.conf"
+    sudo rm -rf /usr/share/sddm/themes/breeze-mac && sudo cp -a "$t/breeze-mac" /usr/share/sddm/themes/ && \
+        sudo chown -R root:root /usr/share/sddm/themes/breeze-mac; rm -rf "$t"
+    sudo install -d /usr/local/share/sddm-sessions
+    sudo ln -sfn /usr/share/wayland-sessions/plasma.desktop /usr/local/share/sddm-sessions/plasma.desktop
+    sudo install -m644 "$HERE/system/sddm/99-zz-mac.conf" /etc/sddm.conf.d/99-zz-mac.conf
+    # SDDM runs its own KWin as user sddm: give it this session's monitor layout (rotation, scale, primary)
+    sudo install -o sddm -g sddm -m644 "$HOME/.config/kwinoutputconfig.json" /var/lib/sddm/.config/kwinoutputconfig.json
 }
 unit_lockwallpaper() {
     say "Macintosh live wallpaper on desktops and behind the lock screen (auto-lock / power settings untouched)"
@@ -265,7 +283,7 @@ resolve() {   # sets SELECTED and RUN (ordered units); fails on unknown ids befo
 plan() {
     resolve "$@"
     echo "features: ${SELECTED[*]}"; echo "units:    ${RUN[*]}"
-    local s=no; for u in "${RUN[@]}"; do case $u in battery|netfeed|sffont) s=yes ;; esac; done; echo "sudo:     $s"
+    local s=no; for u in "${RUN[@]}"; do case $u in battery|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
 }
 apply() {
     resolve "$@"
