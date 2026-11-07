@@ -30,6 +30,7 @@ touches to `~/kde-pre-mac-backup/`.
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals) | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
+| Lock like a Mac | Display off after 2 min on battery / 10 min on power, locks with no grace period, locks on lid close/sleep and on the power key, clamshell mode with an external display, no auto-sleep on power | `install.sh power` |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |
 | Macintosh live wallpaper (Sequoia) | Susan Kare 1-bit scenes as tilted coloured pixel tiles that zoom, scroll and animate; Spectrum and 10 other colours; 10 scenes | `wallpapers/net.local.macintosh` |
