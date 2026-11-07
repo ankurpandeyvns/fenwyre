@@ -56,6 +56,14 @@ step_blur() {
     systemctl --user set-environment QML_IMPORT_PATH="$HOME/.local/lib/qt6/qml"
 }
 
+step_osd() {
+    say "macOS 27.2-style volume/brightness OSD (overrides org.kde.plasma.workspace.osd via QML_IMPORT_PATH)"
+    local m=$HOME/.local/lib/qt6/qml/org/kde/plasma/workspace/osd s=/usr/lib/qt6/qml/org/kde/plasma/workspace/osd
+    mkdir -p "$m"
+    for f in libplasmashell_osd.so plasmashell_osd.qmltypes kde-qmlmodule.version; do ln -sf "$s/$f" "$m/$f"; done
+    cp "$HERE"/osd/{Osd.qml,OsdItem.qml,Glyph.qml,qmldir} "$m/"
+}
+
 step_files() {
     say "launchers, D-Bus services, Dolphin service menu, Konsole profile"
     for f in "$HERE"/config/applications/*.desktop; do put "$f" "$HOME/.local/share/applications/$(basename "$f")"; done
@@ -150,7 +158,7 @@ step_system() {
     sudo systemctl enable --now battery-limit.service nethogs-feed.service
 }
 
-ALL=(bin plasmoids blur files services settings shortcuts layout restart)
+ALL=(bin plasmoids blur osd files services settings shortcuts layout restart)
 case "${1:-all}" in
     list) echo "user steps: ${ALL[*]}   extra: deps system" ;;
     all) for s in "${ALL[@]}"; do "step_$s"; done ;;

@@ -24,6 +24,7 @@ touches to `~/kde-pre-mac-backup/`.
 | Control Center | Wi-Fi, Bluetooth, VPN, Focus/DND, per-screen brightness, volume + output, Now Playing, keyboard backlight, battery mode | `plasmoids/net.local.controlcenter` |
 | Stats / iStat Menus | Menu-bar CPU/MEM sparklines, network Mbps, temp, watts; click for graphs, per-app CPU/memory/network | `plasmoids/net.local.macstats`, `bin/mac-stats*`, `system/bin/nethogs-feed` |
 | Quick Look (Space) | Space previews in Dolphin and on the desktop, arrow keys move between files, big window | GNOME Sushi + `bin/quicklook`, `bin/sushi-launch`, `bin/desktop-quicklook-patch` |
+| Volume / brightness HUD (27.2) | Glass card under the menu bar, top right, with a 16-segment level bar | `osd/` |
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals) | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots | `system/bin/battery-limit` |
@@ -63,6 +64,7 @@ system/             root helpers + units (battery-limit, nethogs-feed)
 plasmoids/          Spotlight, Control Center, Mac Stats widgets
 wallpapers/         Macintosh live wallpaper (interprets Apple's .program scene scripts)
 look-and-feel/      macOS Light / macOS Dark global themes
+osd/                replacement Plasma OSD (Osd.qml), shadowing the system module
 qml-blurbehind/     tiny C++ QML plugin: ask KWin to blur behind a QML item
 plasma-scripts/     Plasma scripting snippets (panel widgets, tray, launcher icon)
 config/             launchers, D-Bus services, Dolphin service menu, Konsole, fontconfig, KRunner plugins

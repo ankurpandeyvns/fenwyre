@@ -36,6 +36,14 @@
 - WhiteSur panel and dialog backgrounds ship different tints (black 45% vs grey 65%). Blur strength is global
   in KWin; the tint is what makes them differ.
 
+## OSD (volume/brightness pop-up)
+- plasmashell loads `Osd` from the QML module `org.kde.plasma.workspace.osd`. A copy earlier on
+  `QML_IMPORT_PATH` wins only if its `qmldir` drops the `prefer :/...` line (otherwise the files compiled
+  into the plugin are used). Symlink the system `libplasmashell_osd.so` for `OsdWindow`.
+- `OsdWindow` accepts `LayerShell.Window.*` attached properties, so the OSD can be anchored top-right.
+- After a Plasma update, if the OSD stops appearing, check `journalctl --user | grep -i osd`: the override
+  may need refreshing from the new stock `Osd.qml`/`OsdItem.qml`.
+
 ## Quick Look
 - GNOME Sushi (`org.gnome.NautilusPreviewer2.ShowFile`) is the best previewer. It caps its window at 50%
   of the screen and, on KWin, sizes before it has a monitor (null → tiny window). Fix both with a
