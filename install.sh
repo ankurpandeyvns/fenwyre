@@ -70,6 +70,7 @@ step_files() {
     put "$HERE/config/dbus-services/org.gnome.NautilusPreviewer.service" "$HOME/.local/share/dbus-1/services/org.gnome.NautilusPreviewer.service"
     put "$HERE/config/kio-servicemenus/quicklook.desktop" "$HOME/.local/share/kio/servicemenus/quicklook.desktop" 755
     for f in "$HERE"/config/konsole/*; do put "$f" "$HOME/.local/share/konsole/$(basename "$f")"; done
+    for f in "$HERE"/config/wireplumber/*.conf; do put "$f" "$HOME/.config/wireplumber/wireplumber.conf.d/$(basename "$f")"; done
     kbuildsycoca6 >/dev/null 2>&1 || true
 }
 

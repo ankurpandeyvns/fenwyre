@@ -29,6 +29,7 @@ touches to `~/kde-pre-mac-backup/`.
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals); the built-in panel steps 2.5% in perceived lightness (CIE L*), like macOS, instead of linear nits | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
+| Bluetooth audio | LDAC locked at its top bitrate (909/990 kbps, measured ~1 Mbps on air) instead of adaptive (~660 kbps here) | `config/wireplumber/52-bluez-ldac-hq.conf` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |

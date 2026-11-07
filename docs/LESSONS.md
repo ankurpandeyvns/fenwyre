@@ -85,3 +85,10 @@
 - Headphones: `sink.formFactor` is `headset`/`headphone` for Bluetooth; for the jack, the active port name has
   "headphone" and `availability !== 2` (2 = unplugged). The OSD override can import
   `org.kde.plasma.private.volume` and read `PreferredDevice.sink` itself.
+- LDAC defaults to adaptive bitrate; on this M1 Max it ran at ~660 kbps and sounded thinner than AAC.
+  `bluez5.a2dp.ldac.quality` is a **device** property: set it in `monitor.bluez.rules` (`update-props`),
+  not `monitor.bluez.properties` (silently ignored there). Verify on the air, not by ear:
+  `sudo timeout 4 btmon`, sum `< ACL ... dlen` over the time span (hq ≈ 1 Mbps incl. overhead).
+- WirePlumber remembers the chosen card profile/codec in `~/.local/state/wireplumber/default-profile`.
+- Before restarting WirePlumber, mute the built-in speakers: the Bluetooth sink vanishes for a few seconds and
+  playback falls back to the speakers.
