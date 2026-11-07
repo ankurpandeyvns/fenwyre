@@ -36,6 +36,7 @@ print(max(1, round(Y(l) * mx)), round(l))
 ' "$cur" "$max" "$step" "$dir")
   qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.SetBrightness "$raw" 1 >/dev/null 2>&1
   qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$level" >/dev/null 2>&1
+  logger -t brightness-here "$out $dir: raw $cur -> $raw/$max (L* $level)"
   exit 0
 fi
 
@@ -48,3 +49,4 @@ if [ "$dir" = up ]; then new=$((cur + step)); else new=$((cur - step)); fi
 [ "$new" -lt 0 ] && new=0
 kscreen-doctor "output.$out.brightness.$new" >/dev/null 2>&1
 qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$new" >/dev/null 2>&1
+logger -t brightness-here "$out $dir: $cur% -> $new%"
