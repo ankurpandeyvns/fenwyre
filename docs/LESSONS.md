@@ -106,3 +106,20 @@
   into its password field. Don't run it while the user is typing.
 - The wallpaper hands off between greeter and desktop through `$XDG_RUNTIME_DIR` state plus a lock watcher
   (`org.freedesktop.ScreenSaver` ActiveChanged) in `qml-lockwatch/`.
+
+## Helium (Chromium) hardware video on Asahi
+- Asahi's AVD decoder is exposed through VA-API (`libva-v4l2-request`): H.264, HEVC, VP9, no AV1 on M1/M2.
+  Helium needs `--enable-features=VaapiVideoDecoder,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL,...`
+  and `--ignore-gpu-blocklist`; YouTube prefers AV1, so an extension hides AV1 from `isTypeSupported`,
+  `canPlayType` and `mediaCapabilities`.
+- `--load-extension` needs `--disable-features=DisableLoadExtensionCommandLineSwitch` on newer Chromium.
+- `helium-wrapper` escapes `~` in the flags file with a bash pattern that also matches `$HOME`; don't rely on
+  home paths there behaving literally.
+- Verify: `chrome://media-internals` → `kVideoDecoderName = VaapiVideoDecoder`, or the GPU process holds
+  `/dev/video*` fds.
+
+## Installer design
+- Features are user-facing and chosen by the user (AGENTS.md Step 0, AskUserQuestion). Each maps to small units;
+  `apply` de-duplicates units and runs them in one fixed order (layout and plasmashell restart last).
+- 4 groups x 4 features matches AskUserQuestion's limits (4 questions, 4 options each). Keep it that way when
+  adding features, or split into a second call.

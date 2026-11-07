@@ -1,0 +1,7 @@
+# Hardware video decode via Asahi AVD (libva-v4l2-request). Tested OK for H.264 and VP9 on 2026-11-08.
+--ozone-platform=wayland
+--ignore-gpu-blocklist
+--enable-features=VaapiVideoDecoder,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL
+# AV1 has no hardware decoder on M1/M2; hide it so YouTube serves VP9/H.264.
+--disable-features=DisableLoadExtensionCommandLineSwitch
+--load-extension=@HOME@/.local/share/helium-extensions/no-av1

@@ -32,6 +32,7 @@ touches to `~/kde-pre-mac-backup/`.
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
 | Bluetooth audio | LDAC locked at its top bitrate (909/990 kbps, measured ~1 Mbps on air) instead of adaptive (~660 kbps here) | `config/wireplumber/52-bluez-ldac-hq.conf` |
 | Sony Clear Bass on LDAC | WH-1000XM3 ignores its own EQ on LDAC, so PipeWire applies a Clear Bass-style tune (−6 dB preamp, +6 dB low shelf at 120 Hz) as a smart filter in front of the headset only; hidden from output lists | `config/pipewire/60-sony-clearbass.conf` (edit `filter.smart.target` for your headset's `bluez_output.<MAC>.1`) |
+| Helium video (Apple silicon) | Hardware VA-API decode for H.264/VP9; an extension hides AV1 (no AV1 decoder on M1/M2) so YouTube uses hardware | `config/helium/` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |
@@ -50,14 +51,19 @@ touches to `~/kde-pre-mac-backup/`.
 
 ## Install
 
+Pick what you want; nothing is all-or-nothing.
+
 ```bash
-./install.sh deps        # pacman packages (sudo)
-./install.sh             # all user-level steps, then restarts plasmashell
-./install.sh system      # battery limit, per-app network feed, SF font priority (sudo)
-./install.sh list        # individual steps
+./install.sh features              # the 16 features: id|group|title|description|sudo
+./install.sh plan menubar hud      # what would run (and whether sudo is needed); changes nothing
+./install.sh apply menubar hud     # apply only those
+./install.sh apply all             # everything
+./install.sh deps                  # pacman packages (sudo)
 ```
 
-Then follow the manual steps in AGENTS.md (WhiteSur theme, fonts, panel order, window rules, wallpaper).
+With an agent (Claude Code, Codex, ...): open this repo and ask it to follow AGENTS.md. Its first step asks you,
+with a multiple-choice prompt, whether to apply everything or which features, then applies and verifies only
+those. Then the manual steps in AGENTS.md (WhiteSur theme, fonts, panel order, window rules).
 
 ## Layout
 

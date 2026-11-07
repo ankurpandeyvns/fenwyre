@@ -32,75 +32,88 @@ how to verify it, and what not to do.
   read `journalctl --user`, unload.
 - QML logs: `console.warn()` from widgets lands in `journalctl --user` (not only the plasmashell unit).
 
-## Steps
+## Step 0: ask the user what to apply (mandatory, before any change)
 
-1. **Packages**: `./install.sh deps`. Also install, user-level:
-   - WhiteSur KDE (github.com/vinceliuice/WhiteSur-kde) Plasma style, colours, Aurorae decoration;
-     WhiteSur icon theme and cursors.
-   - SF Pro / SF Mono: AUR `apple-fonts` (its PKGBUILD may need `bsdtar` instead of `7z` on ARM; build locally).
-   - Source Code Pro for Powerline: the `.otf` files from github.com/powerline/fonts/tree/master/SourceCodePro into
-     `~/.local/share/fonts/SourceCodePro-Powerline/`, then `fc-cache -f`. The Arch `powerline-fonts` package does
-     not include it.
-   Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro"`.
+Never decide on the user's behalf which features to install, and never start with "all". The user picks.
+Use the **AskUserQuestion** tool for every choice below (not plain chat text), then do only what was chosen.
 
-2. **User files and widgets**: `./install.sh bin plasmoids blur files services`.
-   Verify: `ls ~/.local/share/plasma/plasmoids`; `systemctl --user is-active quicklook-nav logi-macmode`.
+1. Read the catalogue: `./install.sh features` (fields: `id|group|title|description|sudo`). There are four
+   groups (Look, Keyboard, Apps, System) of four features, so they fit one AskUserQuestion call.
+2. First call, one single-select question, header "Scope":
+   "Apply all macOS-parity features, or choose which ones?"
+   options: "Everything (Recommended)" / "Let me choose".
+3. If they choose: a second AskUserQuestion call with **four multiSelect questions, one per group**, header =
+   group name, one option per feature: `label` = title, `description` = description, plus " (needs sudo)" when
+   the sudo field is `yes`. Build the options from `./install.sh features`; don't hard-code them.
+4. Machine-specific follow-ups, only for what was picked, again with AskUserQuestion:
+   battery limit percentage (`battery`: 80 / 90 / 100), which Bluetooth headset gets the EQ (`audio`),
+   which apps get window memory (`windows`, offer the dock apps), sudo method for `battery`/`netstats`.
+   If the user picked nothing in a group, skip it; if they picked nothing at all, stop.
+5. Show `./install.sh plan <ids>` (units to run, whether sudo is needed), then run
+   `./install.sh apply <ids>`. Treat "Everything" as `apply all`.
+6. Verify each chosen feature with the checks below, and report per feature: applied + verified,
+   applied but not verified (say why), or skipped by the user.
 
-3. **Settings**: `./install.sh settings`. Then `plasma-apply-lookandfeel -a net.local.macos.dark`.
-   Verify the Cmd/Ctrl swap with a real key event: a synthetic KEY_LEFTMETA+Space must open Spotlight and
-   KEY_LEFTCTRL+Space must not. Verify the theme took: `~/.config/kdedefaults/kdeglobals` shows
-   `ColorScheme=WhiteSurDark` (Plasma writes global-theme values there, not to `~/.config/kdeglobals`).
+## Steps (per feature)
 
-4. **Panels**: build a top panel (launcher, app menu, spacer, system tray, clock) and an auto-hiding bottom
-   dock (icon task manager, trash) on each screen, translucent. Then `./install.sh layout`.
-   Set `panelOpacity=1` for each top panel in `~/.config/plasmashellrc` (`[PlasmaViews][Panel N]`) while
-   plasmashell is stopped, so the bar uses the clear solid background.
-   `addWidget` appends; to put Mac Stats, battery, Sound (net.local.volume), Control Center and Spotlight just left of the clock, stop plasmashell,
-   edit `AppletOrder=` for the panel in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`, start it again.
-   Verify with a screenshot of each bar: Apple logo top-left, tray icons only inside the chevron, Spotlight
-   magnifier visible.
+Prerequisites, any selection: `./install.sh deps`, plus user-level installs as needed:
+- WhiteSur KDE (github.com/vinceliuice/WhiteSur-kde) Plasma style, colours, Aurorae decoration; WhiteSur icons and
+  cursors (`themes`, `menubar`).
+- SF Pro / SF Mono: AUR `apple-fonts` (its PKGBUILD may need `bsdtar` instead of `7z` on ARM; build locally).
+- Source Code Pro for Powerline (`konsole`): the `.otf` files from github.com/powerline/fonts/tree/master/SourceCodePro
+  into `~/.local/share/fonts/SourceCodePro-Powerline/`, then `fc-cache -f`. Arch `powerline-fonts` lacks it.
+Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro"`.
 
-5. **Shortcuts**: `./install.sh shortcuts`, restart plasmashell.
-   Verify: `invokeShortcut _launch` on `/component/mac_shot_screen_desktop` saves a PNG to the Desktop; a
-   synthetic Meta(=Cmd)+Shift+3 does too. Delete your test screenshots.
+- **themes**: then `plasma-apply-lookandfeel -a net.local.macos.dark` (or light, ask). Verify
+  `~/.config/kdedefaults/kdeglobals` shows `ColorScheme=WhiteSurDark` (global-theme values land there).
+  **Glass**: `plasma-sync-glass` sets the WhiteSur panel and dialog tint to one value per theme (both variants use
+  white text, so black 45%; the solid bar 35%). Screenshot the bar and an open popup over the same wallpaper.
+- **menubar**: needs a top panel (launcher, app menu, spacer, system tray, clock) and an auto-hiding bottom dock on
+  each screen. Set `panelOpacity=1` per top panel in `~/.config/plasmashellrc` (`[PlasmaViews][Panel N]`) while
+  plasmashell is stopped. `addWidget` appends; to put Mac Stats, battery, Sound, Control Center (and Spotlight) left
+  of the clock, stop plasmashell, edit `AppletOrder=` in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`,
+  start it. Verify with a screenshot of each bar: Apple logo top-left, no chevron, headphones glyph when a headset
+  is the output.
+- **lockscreen**: lock screen UI takes effect at the next login. Verify with `loginctl lock-session` /
+  `unlock-session` (never `kscreenlocker_greet --testing` while the user is typing: it takes their keystrokes).
+  The wallpaper: `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's,
+  byte-identical; `programs/authored/` follow the same style, extensions marked `// [ext]`). Expect plasmashell at
+  ~21-28% of one core with three screens animating; screens under a maximized window pause; static after unlock.
+- **hud**: verify `qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.volumeChanged 40 100`, then
+  screenshot the screen under the mouse within 1 s (the HUD follows the active screen).
+- **cmdkeys**: verify with a real key event: a synthetic KEY_LEFTMETA+Space must open Spotlight and
+  KEY_LEFTCTRL+Space must not.
+- **spotlight**: Cmd+Space opens it on the first top panel; typing works on the second open too.
+- **screenshots**: `invokeShortcut _launch` on `/component/mac_shot_screen_desktop` saves a PNG to the Desktop;
+  delete your test screenshots.
+- **quicklook**: merge `config/dolphinui-quicklook.xml` into `~/.local/share/kxmlgui5/dolphin/dolphinui.rc`. Verify
+  `quicklook ~/Desktop/some.pdf` opens Sushi large; Space in Dolphin and on the desktop; arrows step through files.
+- **konsole**: new Konsole windows use the Mac profile and the Powerline font.
+- **helium**: restart Helium; `chrome://media-internals` → player → `kVideoDecoderName = VaapiVideoDecoder`, or the
+  `--type=gpu-process` process holds `/dev/video*` fds. Don't touch its `--password-store` line (keyring).
+- **mxkeys**: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`.
+- **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
+- **battery**: `battery-limit` shows the threshold; above it on AC, `charge_behaviour` is `auto-discharge`.
+- **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
+  PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
+  (`sudo timeout 4 btmon`, ~1 Mbps on air).
+- **netstats**: `cat /run/mac-stats/net.json` updates every 2 s.
+- **windows**: create `~/.config/kwinrulesrc` rules, one per app the user chose, with
+  `sizerule=4 positionrule=4 maximizehorizrule=4 maximizevertrule=4` (4 = Remember), matched on the window class
+  (`w.resourceClass` from a KWin script; Chromium `--app` windows need a substring match). Apply with
+  `qdbus6 org.kde.KWin /KWin reconfigure`. Rules take effect from the next close/open.
 
-6. **Quick Look**: merge `config/dolphinui-quicklook.xml` into `~/.local/share/kxmlgui5/dolphin/dolphinui.rc`.
-   Verify: `quicklook ~/Desktop/some.pdf` opens Sushi at a large size; Space in Dolphin and on the desktop;
-   arrow keys step through files.
+**Final check**: no coredumps, no QML errors from `net.local.*` in the journal, plasmashell CPU ~5% at idle with a
+static wallpaper, every screenshot reviewed. Report per feature what was verified and what was not.
 
-7. **Logitech**: `logi-macmode` sets Solaar `multiplatform=MacOS` for every Logitech keyboard at login and
-   on every connect. Verify: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`.
+Alternative wallpaper: Smart Video Wallpaper Reborn (`luisbocanegra.smart.video.wallpaper.reborn`) with Apple
+aerials (macOS 26 manifest:
+`https://configuration.apple.com/configurations/internetservices/aerials/resources-config-26-0.plist`; videos on
+sylvan.apple.com need Apple's root CA). Set `PauseMode`; video wallpapers compete with browsers for the decoder.
 
-8. **System**: `./install.sh system`. Verify: `battery-limit` shows the threshold;
-   `cat /run/mac-stats/net.json` updates every 2 s.
-
-9. **Window memory**: create `~/.config/kwinrulesrc` rules, one per app the user keeps in the dock, with
-   `sizerule=4 positionrule=4 maximizehorizrule=4 maximizevertrule=4` (4 = Remember), matched on the
-   window class (get it from a KWin script: `w.resourceClass`; Chromium `--app` windows need a substring match).
-   Apply with `qdbus6 org.kde.KWin /KWin reconfigure`. Rules take effect from the next close/open.
-
-10. **Glass**: `plasma-sync-glass` sets the WhiteSur panel and dialog tint to one value per theme. Both
-    WhiteSur variants use white text, so both use black at 45%. Spotlight uses the same tint. Verify by
-    screenshotting the bar and an open Control Center popup over the same wallpaper.
-
-11. **Wallpaper**: the Macintosh live wallpaper is installed by `./install.sh plasmoids`. Apply it with
-    Plasma scripting: `desktops().forEach(function(d){d.wallpaperPlugin="net.local.macintosh"})`, and set
-    `Colour=Spectrum`, `Scene=Cycle` in the `["Wallpaper","net.local.macintosh","General"]` group.
-    `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's, byte-identical;
-    `programs/authored/` follow the same style, with extensions marked `// [ext]`). Animation runs on the render thread; expect plasmashell at about 21-28% of one core with three
-    screens animating at 60 fps; screens under a maximized window pause.
-    Alternative: Smart Video Wallpaper Reborn (`luisbocanegra.smart.video.wallpaper.reborn`) with Apple
-    aerials. The macOS 26 manifest is
-    `https://configuration.apple.com/configurations/internetservices/aerials/resources-config-26-0.plist`
-    (points to a resources tar with `entries.json`; videos on sylvan.apple.com need Apple's root CA). Set
-    `PauseMode` so playback pauses under windows; a video wallpaper competes with browsers for the hardware
-    decoder.
-
-12. **Final check**: no coredumps, no QML errors from `net.local.*` in the journal, plasmashell CPU at idle
-    about 5% with a static wallpaper (the Macintosh wallpaper adds about 15-20%), and every screenshot reviewed. Report what was verified and what was not.
-
-## Machine-specific (decide with the user)
+## Machine-specific (ask with AskUserQuestion, Step 0.4)
 
 - Monitor layout and scale, dock app list, which apps get window rules.
 - Battery limit percentage (default 80).
+- Bluetooth headset for the EQ (its `bluez_output.<MAC>.1` node name).
 - KWallet vs gnome-keyring as Secret Service: don't change it here.

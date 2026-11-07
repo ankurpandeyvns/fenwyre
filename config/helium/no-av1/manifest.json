@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "No AV1 (use hardware-decodable codecs)",
+  "version": "1.0",
+  "description": "Hides AV1 support so sites like YouTube serve VP9/H.264, which the Apple Silicon decoder handles.",
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["inject.js"],
+    "run_at": "document_start",
+    "all_frames": true,
+    "world": "MAIN"
+  }]
+}

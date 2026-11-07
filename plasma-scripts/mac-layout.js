@@ -4,11 +4,14 @@
 // sets the macOS clock format. Make the bars clear: set panelOpacity=1 (opaque) for top panels in
 // plasmashellrc; plasma-sync-glass makes the theme's solid panel background fully transparent.
 // Cmd+Space (Ctrl+Space after the Cmd/Ctrl swap) goes to the Spotlight on the first top panel.
+// install.sh may prepend `var WANT = [...]` to add only the widgets of the features the user picked.
+if (typeof WANT === "undefined")
+    var WANT = ["net.local.macstats", "org.kde.plasma.battery", "net.local.volume", "net.local.controlcenter", "net.local.spotlight"];
 var out = [];
 var first = true;
 panels().forEach(function (p) {
     if (p.location !== "top") return;
-    ["net.local.macstats", "org.kde.plasma.battery", "net.local.volume", "net.local.controlcenter", "net.local.spotlight"].forEach(function (id) {
+    WANT.forEach(function (id) {
         if (!p.widgets(id).length) { p.addWidget(id); out.push("panel " + p.id + ": added " + id); }
     });
     p.widgets("org.kde.plasma.kickoff").forEach(function (w) {
