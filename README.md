@@ -30,7 +30,7 @@ touches to `~/kde-pre-mac-backup/`.
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals); the built-in panel steps 2.5% in perceived lightness (CIE L*), like macOS, instead of linear nits | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
-| Bluetooth audio | LDAC locked at its top bitrate (909/990 kbps, measured ~1 Mbps on air) instead of adaptive (~660 kbps here) | `config/wireplumber/52-bluez-ldac-hq.conf` |
+| Bluetooth audio | LDAC adaptive: backs off on radio dips instead of skipping (`hq` = locked 990 kbps, fuller but skips on a weak link) | `config/wireplumber/52-bluez-ldac.conf` |
 | Sony Clear Bass on LDAC | WH-1000XM3 ignores its own EQ on LDAC, so PipeWire applies a Clear Bass-style tune (−6 dB preamp, +6 dB low shelf at 120 Hz) as a smart filter in front of the headset only; hidden from output lists | `config/pipewire/60-sony-clearbass.conf` (edit `filter.smart.target` for your headset's `bluez_output.<MAC>.1`) |
 | Helium video (Apple silicon) | Hardware VA-API decode for H.264/VP9; an extension hides AV1 (no AV1 decoder on M1/M2) so YouTube uses hardware | `config/helium/` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |

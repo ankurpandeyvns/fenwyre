@@ -42,7 +42,7 @@ helium|Apps|Helium hardware video|VA-API decode on Apple silicon (H.264/VP9) and
 mxkeys|Apps|Logitech Mac mode|Switch Logitech keyboards (MX Keys) to macOS layout at login and on every reconnect (Solaar)|no
 brightness|Apps|Brightness keys|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%)|no
 battery|System|Battery limit + fan profiles|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max)|yes
-audio|System|Bluetooth audio|LDAC locked at full bitrate; Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
+audio|System|Bluetooth audio|LDAC adaptive bitrate (no skipping; hq option in the file); Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
 netstats|System|Per-app network + SF font|Root packet-capture feed for Mac Stats per-app network; SF Pro preferred over other sans fonts|yes
 windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size/position (agent creates them, see AGENTS.md)|no
 '
@@ -232,7 +232,7 @@ unit_brightness() {
     systemctl --user enable --now brightness-here-repeat.service
 }
 unit_audio() {
-    say "Bluetooth audio: LDAC full bitrate; Sony EQ filter (targets the MAC in the file)"
+    say "Bluetooth audio: LDAC adaptive (no skips on radio dips); Sony EQ filter (targets the MAC in the file)"
     for f in "$HERE"/config/wireplumber/*.conf; do put "$f" "$HOME/.config/wireplumber/wireplumber.conf.d/$(basename "$f")"; done
     for f in "$HERE"/config/pipewire/*.conf; do put "$f" "$HOME/.config/pipewire/pipewire.conf.d/$(basename "$f")"; done
     echo "Takes effect after: systemctl --user restart pipewire pipewire-pulse wireplumber (mute the speakers first)"

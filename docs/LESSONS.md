@@ -162,4 +162,7 @@
   10 s smoothing, 30 s least-squares trend, 60 s prediction; start at 60 C only if the prediction reaches 70 C;
   creep up by 0.15% of the fan range per cycle per degree the prediction exceeds 80 C; full speed only at 90 C+,
   still rising, fans already past 60%; stop below 58 C after 30 s.
+- LDAC `hq` (990 kbps) skips now and then even with clean PipeWire (0 errors in `pw-top`), Wi-Fi on 5 GHz and a
+  20 s btmon capture with no stalls: brief radio dips with nothing to back off to. Adaptive (`auto`) avoids that at
+  the cost of a lower bitrate most of the time; the user chose adaptive.
 

@@ -104,7 +104,7 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   `system/fan/build-module` (the stock module comes back until then; mac-fand then leaves the fans to the SMC).
 - **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
   PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
-  (`sudo timeout 4 btmon`, ~1 Mbps on air).
+  (`sudo timeout 4 btmon`: adaptive ~660-990 kbps; `hq` ~1 Mbps).
 - **netstats**: `cat /run/mac-stats/net.json` updates every 2 s.
 - **windows**: create `~/.config/kwinrulesrc` rules, one per app the user chose, with
   `sizerule=4 positionrule=4 maximizehorizrule=4 maximizevertrule=4` (4 = Remember), matched on the window class
