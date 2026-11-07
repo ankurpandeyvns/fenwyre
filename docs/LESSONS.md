@@ -133,4 +133,15 @@
 - To hide sessions without uninstalling them (Hyprland/Omarchy), point `[Wayland] SessionDir` at a directory holding
   only a symlink to `plasma.desktop`. The greeter logs which session files it read.
 - Autologin hides the greeter at boot; you only see it after logging out.
+- Lock clock "Stencil" = SF Pro Rounded Heavy glyphs with gaps cut (`destination-out` lines) at stroke junctions,
+  positions measured on the outlines (`cuts` table in `GlassClock.qml`). Apple's own lock-screen clock face is a
+  private system font (not in the public SF downloads); copy it from your own macOS install if you want it exact.
+- Testing Qt Quick shaders: `QT_QPA_PLATFORM=offscreen` falls back to the software renderer (ShaderEffect/MultiEffect
+  draw nothing) and offscreen OpenGL fails to build pipelines on Asahi; render in a real window with
+  `Qt.WindowDoesNotAcceptFocus | Qt.WindowTransparentForInput` and `grabToImage`. Qt logs go to the journal unless
+  `QT_FORCE_STDERR_LOGGING=1`. Compile `.qsb` with `qsb --glsl "300 es,330,440"` (other targets fail to link).
+
+## Narrow screens
+- A portrait 1080p monitor at 1.25 gives an 864 px menu bar: app menu + stats push the clock off. Mac Stats has a
+  Hidden Bar-style chevron (`collapse` = auto/shown/hidden per widget; auto collapses below 1200 px).
 

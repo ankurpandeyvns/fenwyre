@@ -49,11 +49,11 @@ void main()
     // clear glass: lifted, slightly cool-tinted backdrop
     float l = dot(behind, vec3(0.299, 0.587, 0.114));
     behind = mix(vec3(l), behind, 0.8) * vec3(0.93, 0.97, 1.06);
-    vec3 glass = mix(behind, vec3(0.94, 0.96, 1.0), 0.22 + 0.16 * topLight);
+    vec3 glass = mix(behind, vec3(0.94, 0.96, 1.0), 0.14 + 0.12 * topLight);
     // refraction darkening just inside the rim, then a crisp bright rim line
     float band = 1.0 - smoothstep(0.70, 0.98, softAt(uv, rimWidth * 2.2));
     glass *= 1.0 - 0.10 * band * (1.0 - rim);
     glass = mix(glass, vec3(1.0), rim * (0.70 + 0.30 * topLight));
-    float alpha = inside * (0.86 + 0.14 * rim);
+    float alpha = inside * (0.74 + 0.26 * rim);
     fragColor = vec4(glass * alpha, alpha) * qt_Opacity;
 }

@@ -14,7 +14,7 @@ PlasmoidItem {
     readonly property int sparkLength: 30
     readonly property int historyLength: 90      // 3 minutes at 2 s
     readonly property int intervalMs: 2000
-    readonly property string cmd: "@HOME@/.local/bin/mac-stats-detail"
+    readonly property string cmd: "/home/ankur/.local/bin/mac-stats-detail"
 
     readonly property color cUser: "#0a84ff"
     readonly property color cSys: "#ff453a"
@@ -332,12 +332,42 @@ PlasmoidItem {
             }
             root.open(best);
         }
-        Layout.minimumWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 2
+        // Hidden Bar-style chevron: collapses the stats so narrow screens keep room for the
+        // app menu and the clock. "auto" = collapsed when this screen is narrower than 1200 px.
+        readonly property bool collapsed: {
+            const c = Plasmoid.configuration.collapse;
+            if (c === "hidden") return true;
+            if (c === "shown") return false;
+            return Screen.width > 0 && Screen.width < 1200;
+        }
+        Layout.minimumWidth: chevron.width + (collapsed ? 0 : row.implicitWidth + Kirigami.Units.smallSpacing)
+                             + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
+
+        PlasmaComponents.Label {
+            id: chevron
+            anchors.left: parent.left
+            anchors.leftMargin: Kirigami.Units.smallSpacing
+            anchors.verticalCenter: parent.verticalCenter
+            text: compact.collapsed ? "\u2039" : "\u203A"      // ‹ show / › hide
+            font.pixelSize: Math.round(compact.height * 0.62)
+            font.weight: Font.DemiBold
+            opacity: chevronArea.containsMouse ? 1.0 : 0.7
+            MouseArea {
+                id: chevronArea
+                anchors.fill: parent
+                anchors.margins: -Kirigami.Units.smallSpacing
+                hoverEnabled: true
+                onClicked: Plasmoid.configuration.collapse = compact.collapsed ? "shown" : "hidden"
+            }
+        }
 
         RowLayout {
             id: row
-            anchors.centerIn: parent
+            visible: !compact.collapsed
+            anchors.left: chevron.right
+            anchors.leftMargin: Kirigami.Units.smallSpacing
+            anchors.verticalCenter: parent.verticalCenter
             spacing: Math.round(Kirigami.Units.smallSpacing * 1.5)
 
             RowLayout {

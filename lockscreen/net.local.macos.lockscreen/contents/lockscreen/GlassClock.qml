@@ -1,8 +1,8 @@
 /*
     macOS 26-style lock screen clock: date line above a very large "Liquid Glass" time.
 
-    Default style "Stencil" draws the macOS lock screen digits as vector strokes (each
-    digit is built from separate rounded pieces with gaps between them); the other
+    Default style "Stencil" draws SF Pro Rounded Heavy digits with stencil gaps cut through
+    them at the stroke junctions, like the macOS lock screen; the other
     styles use the installed SF / New York faces. The glyph mask is softened (blur +
     threshold) to round the corners; the glass is a frosted, brightened sample of the
     wallpaper behind, a milky gradient, a bright inner rim band and a soft shadow.
@@ -74,144 +74,53 @@ Item {
     }
 
     // ------------------------------------------------------------ stencil digits
-    // Units of the digit height h, origin at the glyph's top-left, y down. Every piece is
-    // a thick stroke (butt caps); the gaps between pieces are the stencil bridges.
-    readonly property real sw: 0.25 * (0.7 + 0.3 * weight)      // stroke width (of h)
-    readonly property var advances: ({ "1": 0.56, ":": 0.30 })
-    function adv(ch) { return (advances[ch] !== undefined ? advances[ch] : 0.80); }
-    readonly property real spacing: 0.11
-    readonly property real gapW: 0.028          // stencil gap (of h)
-    function stencilWidth(s) {
-        var w = 0;
-        for (var i = 0; i < s.length; ++i) w += adv(s[i]) + (i ? spacing : 0);
-        return w * digitH;
-    }
-    function strokePieces(ctx, ch, x0, y0, h, cut) {
-        var r = sw / 2;
-        function P(x, y) { return [x0 + x * h, y0 + y * h]; }
-        // Each piece first erases a slightly larger halo of itself, so wherever it
-        // meets an earlier piece a clean stencil gap remains.
-        var g = gapW * h, base = ctx.lineWidth;
-        function line(ax, ay, bx, by, wScale) {
-            var a = P(ax, ay), b = P(bx, by);
-            var lw = base * (wScale || 1);
-            if (cut) {
-                var dx = b[0] - a[0], dy = b[1] - a[1], L = Math.sqrt(dx * dx + dy * dy) || 1;
-                var ex = dx / L * g, ey = dy / L * g;
-                ctx.save();
-                ctx.globalCompositeOperation = "destination-out";
-                ctx.lineWidth = lw + 2 * g;
-                ctx.beginPath();
-                ctx.moveTo(a[0] - ex, a[1] - ey); ctx.lineTo(b[0] + ex, b[1] + ey);
-                ctx.stroke();
-                ctx.restore();
-            }
-            ctx.lineWidth = lw;
-            ctx.beginPath();
-            ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
-            ctx.stroke();
-            ctx.lineWidth = base;
-        }
-        function arc(cx, cy, R, a0, a1, ccw) {
-            var c = P(cx, cy);
-            if (cut) {
-                var da = g / (R * h) * (ccw ? -1 : 1);
-                ctx.save();
-                ctx.globalCompositeOperation = "destination-out";
-                ctx.lineWidth = base + 2 * g;
-                ctx.beginPath();
-                ctx.arc(c[0], c[1], R * h, a0 - da, a1 + da, !!ccw);
-                ctx.stroke();
-                ctx.restore();
-            }
-            ctx.beginPath();
-            ctx.arc(c[0], c[1], R * h, a0, a1, !!ccw);
-            ctx.stroke();
-        }
-        function dot(cx, cy, R) {
-            ctx.beginPath();
-            var c = P(cx, cy);
-            ctx.arc(c[0], c[1], R * h, 0, 2 * Math.PI, false);
-            ctx.fill();
-        }
-        // one side of a "0": arc, straight side, arc as a single stroke
-        function halfO(left) {
-            var Wd = 0.80, Rr = (Wd / 2 - r), cxx = Wd / 2, t = r + Rr, b2 = 1 - r - Rr, gapA = 0.20;
-            function trace(ext) {
-                ctx.beginPath();
-                var c1 = P(cxx, t), c2 = P(cxx, b2), RR = Rr * h;
-                if (left) {
-                    ctx.arc(c1[0], c1[1], RR, Math.PI * 1.5 - gapA + ext, Math.PI, true);
-                    ctx.arc(c2[0], c2[1], RR, Math.PI, Math.PI * 0.5 + gapA - ext, true);
-                } else {
-                    ctx.arc(c1[0], c1[1], RR, Math.PI * 1.5 + gapA - ext, Math.PI * 2, false);
-                    ctx.arc(c2[0], c2[1], RR, 0, Math.PI * 0.5 - gapA + ext, false);
-                }
-                ctx.stroke();
-            }
-            trace(0);
-        }
-        var PI = Math.PI, W = 0.80, cx = W / 2, R = cx - r;
-        switch (ch) {
-        case "0":
-            halfO(true);
-            halfO(false);
-            break;
-        case "1":
-            line(0.03, 0.25, 0.25, 0.10, 0.62);             // flag (thinner, separate)
-            line(0.43, 0.0, 0.43, 1.0);                     // stem
-            break;
-        case "2":
-            arc(cx, r + R * 0.98, R, PI * 1.0, PI * 2.05, false);            // top hook
-            line(0.71, 0.36, 0.06, 0.88, 0.92);                                  // diagonal
-            line(0.02, 1 - r * 0.72, W, 1 - r * 0.72, 0.72);                 // base (thinner)
-            break;
-        case "3":
-            arc(cx - 0.02, 0.265, 0.20, PI * 1.02, PI * 2.30, false);
-            arc(cx - 0.02, 0.70, 0.235, PI * 1.72, PI * 2.98, false);
-            break;
-        case "4":
-            line(0.52, 0.02, 0.10, 0.58);                   // diagonal
-            line(0.02, 0.73, 0.62, 0.73);                   // bar (ends at the stem)
-            line(0.60, 0.33, 0.60, 1.0);                    // stem (crosses the bar)
-            break;
-        case "5":
-            line(0.10, r, 0.74, r);                         // top bar
-            line(0.12 + r, 0.10, 0.12 + r, 0.42);           // left upright
-            arc(cx - 0.01, 0.655, 0.225, PI * 1.25, PI * 2.80, false);       // bowl
-            break;
-        case "6":
-            arc(cx, 0.67, 0.205, PI * 1.18, PI * 3.12, false);               // loop (gap at top-left)
-            line(0.17, 0.53, 0.50, 0.03);                   // rising stroke
-            break;
-        case "7":
-            line(0.02, r, W, r);                            // top bar
-            line(0.66, 0.32, 0.26, 1.0);                    // diagonal
-            break;
-        case "8":
-            arc(cx, 0.255, 0.18, PI * 0.72, PI * 2.28, false);
-            arc(cx, 0.705, 0.215, PI * 1.76, PI * 3.24, false);
-            break;
-        case "9":
-            arc(cx, 0.33, 0.205, PI * 0.18, PI * 2.12, false);               // loop (gap at bottom-right)
-            line(0.63, 0.47, 0.30, 0.97);                   // tail
-            break;
-        case ":":
-            dot(0.15, 0.32, 0.125);
-            dot(0.15, 0.80, 0.125);
-            break;
-        }
-    }
-    // Draw the time at (x, y) with the current style; `stroke` for the outline pass.
+    // macOS "Stencil": SF Pro Rounded Heavy glyphs with stencil gaps cut through them (the 1's
+    // flag, the 2's hook and base, ...). Cuts are [x1, y1, x2, y2]: x in units of the glyph's
+    // advance, y in units of the digit height, origin at the glyph's top-left. Positions were
+    // measured on the font's outlines (stroke edges), so each gap falls on a stroke junction.
+    readonly property var cuts: ({
+        "0": [[0.66, 0.28, 0.94, 0.04], [0.06, 0.96, 0.34, 0.72]],
+        "1": [[0.415, -0.1, 0.415, 0.42]],
+        "2": [[0.60, 0.27, 0.95, 0.67], [-0.1, 0.80, 0.45, 0.80]],
+        "3": [[0.56, 0.47, 1.10, 0.47]],
+        "4": [[0.565, -0.1, 0.565, 0.62]],
+        "5": [[0.38, -0.05, 0.38, 0.22]],
+        "6": [[0.335, 0.40, 0.335, 0.54]],
+        "7": [[0.55, 0.225, 1.10, 0.225]],
+        "8": [[-0.05, 0.50, 0.31, 0.50], [0.69, 0.50, 1.05, 0.50]],
+        "9": [[0.672, 0.44, 0.672, 0.62]]
+    })
+    readonly property real gapW: 0.042          // stencil gap, of the digit height
+    readonly property real tracking: 0.035      // extra space between glyphs, of the digit height
+    // SF Pro Rounded: digit height = 0.741 em, digit top = 0.723 em above the baseline
+    readonly property int stencilPx: Math.round(digitH / 0.741)
+    readonly property int stencilWeight: 600 + Math.round(weight * 2) * 100     // 600..800 (Heavy)
+    function stencilFont() { return stencilWeight + " " + stencilPx + "px \"SF Pro Rounded\""; }
+    // Draw the time at (x, y) = top-left of the digits; `cut` punches the stencil gaps.
     function drawTime(ctx, x, y, cut) {
         if (stencil) {
-            ctx.lineWidth = sw * digitH;
-            ctx.lineCap = "butt";
-            ctx.lineJoin = "round";
-            var xx = x;
+            ctx.font = stencilFont();
+            ctx.textBaseline = "alphabetic";
+            var base = y + 0.723 * stencilPx, xx = x;
             for (var i = 0; i < timeText.length; ++i) {
-                strokePieces(ctx, timeText[i], xx, y, digitH, !!cut);
-                xx += (adv(timeText[i]) + spacing) * digitH;
+                var ch = timeText[i], a = ctx.measureText(ch).width;
+                ctx.globalCompositeOperation = "source-over";
+                ctx.fillText(ch, xx, base);
+                var cs = cuts[ch];
+                if (cut && cs) {
+                    ctx.save();
+                    ctx.globalCompositeOperation = "destination-out";
+                    ctx.lineCap = "butt";
+                    ctx.lineWidth = gapW * digitH;
+                    for (var k = 0; k < cs.length; ++k) {
+                        ctx.beginPath();
+                        ctx.moveTo(xx + cs[k][0] * a, y + cs[k][1] * digitH);
+                        ctx.lineTo(xx + cs[k][2] * a, y + cs[k][3] * digitH);
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                }
+                xx += a + tracking * digitH;
             }
         } else {
             ctx.font = cssWeight + " " + timePx + "px \"" + family + "\"";
@@ -221,13 +130,21 @@ Item {
     }
 
     TextMetrics {
+        id: stencilMetrics
+        font.family: "SF Pro Rounded"
+        font.weight: clock.stencilWeight
+        font.pixelSize: clock.stencilPx
+        text: clock.timeText
+    }
+    TextMetrics {
         id: metrics
         font.family: clock.family
         font.weight: clock.cssWeight
         font.pixelSize: clock.timePx
         text: clock.timeText
     }
-    readonly property real textW: stencil ? stencilWidth(timeText) : metrics.advanceWidth
+    readonly property real textW: stencil ? stencilMetrics.advanceWidth + tracking * digitH * Math.max(0, timeText.length - 1)
+                                             : metrics.advanceWidth
     readonly property real pad: Math.round(digitH * 0.25)
     onTextWChanged: redraw()
     onTimeTextChanged: redraw()
@@ -298,9 +215,9 @@ Item {
             source: behind
             autoPaddingEnabled: false
             blurEnabled: true
-            blur: 0.35
+            blur: 0.26
             blurMax: 32
-            brightness: 0.12
+            brightness: 0.05
             layer.enabled: true
         }
         ShaderEffectSource {
