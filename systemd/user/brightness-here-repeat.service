@@ -1,0 +1,12 @@
+[Unit]
+Description=Brightness keys: keep changing the display under the mouse while held
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/brightness-here-repeat
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

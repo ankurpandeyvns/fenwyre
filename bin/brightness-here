@@ -1,0 +1,25 @@
+#!/bin/bash
+# Change brightness of the display under the mouse only (like macOS + BetterDisplay).
+#   brightness-here up|down [step]
+# KWin's active output follows the mouse (kwinrc [Windows] ActiveMouseScreen, default true).
+set -uo pipefail
+dir=${1:-up}; step=${2:-5}
+out=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null) || exit 1
+[ -n "$out" ] || exit 1
+
+cur=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$out" '
+  /^Output:/ { name = $3 }
+  name == o && /Brightness control/ { if (match($0, /set to [0-9]+%/)) { print substr($0, RSTART + 7, RLENGTH - 8); exit } }')
+[ -n "$cur" ] || exit 1
+
+case "$dir" in
+  up)   new=$((cur + step)) ;;
+  down) new=$((cur - step)) ;;
+  *)    echo "usage: brightness-here up|down [step]" >&2; exit 2 ;;
+esac
+min=0; [ "$out" = eDP-1 ] && min=1   # keep the built-in backlight from switching off
+[ "$new" -gt 100 ] && new=100
+[ "$new" -lt "$min" ] && new=$min
+
+kscreen-doctor "output.$out.brightness.$new" >/dev/null 2>&1
+qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$new" >/dev/null 2>&1

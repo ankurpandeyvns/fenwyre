@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Screenshot: Selected Region (Cmd+Shift+4)
+Exec=spectacle -b -r
+Icon=org.kde.spectacle
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true

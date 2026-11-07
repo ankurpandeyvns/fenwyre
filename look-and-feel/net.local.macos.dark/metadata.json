@@ -1,0 +1,4 @@
+{ "KPackageStructure": "Plasma/LookAndFeel",
+  "KPlugin": { "Id": "net.local.macos.dark", "Name": "macOS Dark", "Description": "WhiteSur macOS look (colours, icons, window buttons, Plasma style) without layout changes",
+               "Authors": [{ "Name": "local" }], "License": "GPL-3.0", "Version": "1.0" },
+  "X-Plasma-APIVersion": "2" }

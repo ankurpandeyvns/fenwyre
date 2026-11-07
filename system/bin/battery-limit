@@ -1,0 +1,92 @@
+#!/bin/bash
+# battery-limit: AlDente-style charge limiting for Omarchy (Asahi MacBook or any laptop).
+#
+#   battery-limit              show status
+#   battery-limit 80           limit charging to 80% (persists across reboots)
+#   battery-limit off          charge to 100%
+#   battery-limit top-up       charge to 100% once, then return to the limit after the next reboot/`apply`
+#   (root/service) battery-limit apply | daemon [--once]
+#
+# Strategy:
+#  1. Native: the kernel's charge_control_end_threshold (Asahi macsmc-battery and most laptops).
+#     The value is read back; some firmware only accepts certain values (e.g. 80/100).
+#  2. Fallback, if native is missing or doesn't stick: a small daemon toggles charge_behaviour
+#     (inhibit-charge above the limit, auto below limit-HYST), like AlDente's "sailing" mode.
+# Config: /etc/battery-limit.conf (LIMIT=80, HYST=3). Service: battery-limit.service.
+# Env SYSFS=/path and CONF=/path let tests use a fake tree.
+set -uo pipefail
+SYS=${SYSFS:-/sys}
+CONF=${CONF:-/etc/battery-limit.conf}
+LIMIT=100; HYST=3
+[ -r "$CONF" ] && . "$CONF"
+
+bat(){ local p; for p in "$SYS"/class/power_supply/*; do [ "$(cat "$p/type" 2>/dev/null)" = Battery ] && [ "$(cat "$p/scope" 2>/dev/null)" != Device ] && { echo "$p"; return; }; done; return 1; }
+B=$(bat) || { echo "No battery found under $SYS/class/power_supply" >&2; exit 1; }
+END=$B/charge_control_end_threshold START=$B/charge_control_start_threshold BEH=$B/charge_behaviour
+cap(){ cat "$B/capacity"; }
+need_root(){ [ "$(id -u)" = 0 ] || [ -n "${SYSFS:-}" ] || exec sudo "$0" "$@"; }
+
+native_set(){ # $1 = percent; returns 0 only if the kernel kept exactly that value
+  local n=$1 s=$(( $1 > 5 ? $1 - 5 : 0 ))
+  [ -f "$END" ] || return 1
+  if [ -f "$START" ]; then
+    # order matters: start must stay below end
+    if [ "$n" -ge "$(cat "$END" 2>/dev/null || echo 100)" ]; then echo "$n" > "$END" 2>/dev/null; echo "$s" > "$START" 2>/dev/null
+    else echo "$s" > "$START" 2>/dev/null; echo "$n" > "$END" 2>/dev/null; fi
+  else
+    echo "$n" > "$END" 2>/dev/null
+  fi
+  [ "$(cat "$END" 2>/dev/null)" = "$n" ]
+}
+behaviour_set(){ [ -f "$BEH" ] && echo "$1" > "$BEH" 2>/dev/null; }
+
+status(){
+  echo "Battery:   $(basename "$B")  $(cap)%  $(cat "$B/status" 2>/dev/null)"
+  echo "Configured limit: ${LIMIT}%  (hysteresis ${HYST}%)  [$CONF]"
+  [ -f "$END" ] && echo "Native end threshold: $(cat "$END")%" || echo "Native end threshold: not supported by this kernel"
+  [ -f "$START" ] && echo "Native start threshold: $(cat "$START")%"
+  [ -f "$BEH" ] && echo "charge_behaviour: $(cat "$BEH")"
+  command -v systemctl >/dev/null && echo "Service: $(systemctl is-active battery-limit.service 2>/dev/null)"
+}
+
+apply(){ # used at boot by the service; exit 0 = native works, 3 = daemon needed
+  if native_set "$LIMIT"; then behaviour_set auto; echo "native threshold set to ${LIMIT}%"; return 0; fi
+  [ "$LIMIT" -ge 100 ] && { behaviour_set auto; return 0; }
+  [ -f "$BEH" ] && { echo "native threshold unavailable/rejected; using charge_behaviour daemon"; return 3; }
+  echo "Neither charge_control_end_threshold nor charge_behaviour is usable here" >&2; return 1
+}
+
+daemon(){
+  local once=${1:-}
+  while :; do
+    [ -r "$CONF" ] && . "$CONF"
+    local c; c=$(cap)
+    if [ "$LIMIT" -ge 100 ]; then behaviour_set auto
+    elif [ "$c" -ge "$LIMIT" ]; then behaviour_set inhibit-charge
+    elif [ "$c" -le $(( LIMIT - HYST )) ]; then behaviour_set auto
+    fi
+    [ "$once" = --once ] && break
+    sleep 60
+  done
+}
+
+case "${1:-status}" in
+  status) status ;;
+  apply) need_root "$@"; apply ;;
+  daemon) need_root "$@"; apply; rc=$?; [ $rc = 3 ] && daemon "${2:-}"; [ $rc = 0 ] && [ "${2:-}" != --once ] && exec sleep infinity; exit $rc ;;
+  off) need_root "$@"; printf 'LIMIT=100\nHYST=%s\n' "$HYST" > "$CONF"; LIMIT=100; apply; systemctl restart battery-limit.service 2>/dev/null; status ;;
+  top-up) need_root "$@"; native_set 100 || true; behaviour_set auto; : > /run/battery-limit.topup; echo "Charging to 100% now; the ${LIMIT}% limit returns on next boot or 'battery-limit apply'." ;;
+  [0-9]*) need_root "$@"
+     n=$1; { [ "$n" -ge 20 ] && [ "$n" -le 100 ]; } || { echo "limit must be 20..100"; exit 2; }
+     printf 'LIMIT=%s\nHYST=%s\n' "$n" "$HYST" > "$CONF"; LIMIT=$n
+     apply; rc=$?
+     systemctl restart battery-limit.service 2>/dev/null || true
+     [ $rc = 3 ] && echo "Limit enforced by battery-limit.service (charge_behaviour)."
+     status ;;
+  save) need_root "$@"  # ExecStop: keep a limit changed elsewhere (KDE Power Management) across reboots
+     [ -e /run/battery-limit.topup ] && exit 0
+     v=$(cat "$END" 2>/dev/null) || exit 0
+     { [ "$v" -ge 20 ] && [ "$v" -le 100 ]; } 2>/dev/null || exit 0
+     [ "$v" = "$LIMIT" ] || { printf 'LIMIT=%s\nHYST=%s\n' "$v" "$HYST" > "$CONF"; echo "saved limit ${v}%"; } ;;
+  *) sed -n '2,9p' "$0"; exit 2 ;;
+esac

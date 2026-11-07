@@ -1,0 +1,5 @@
+<!-- Merge into ~/.local/share/kxmlgui5/dolphin/dolphinui.rc inside <ActionProperties scheme="Default">
+     (create the file with version="1" if it does not exist, so it merges with the built-in UI).
+     Space -> Quick Look; frees Space from Dolphin's selection mode. -->
+<Action name="servicemenu_quicklook.desktop::quicklook" shortcut="Space"/>
+<Action name="toggle_selection_mode" shortcut=""/>

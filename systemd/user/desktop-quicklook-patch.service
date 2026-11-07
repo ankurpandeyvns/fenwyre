@@ -1,0 +1,10 @@
+[Unit]
+Description=Rebuild the Quick Look (Space) patch of the Plasma desktop after Plasma updates
+Before=plasma-plasmashell.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/desktop-quicklook-patch
+
+[Install]
+WantedBy=plasma-workspace.target

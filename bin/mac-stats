@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""mac-stats: iStat-Menus-style Waybar module for Omarchy (Asahi MacBook or any Linux laptop).
+
+Prints one JSON line for a Waybar "custom" module: short text in the bar, full stats in the tooltip.
+Auto-discovers sensors, so it works with whatever the kernel exposes (Asahi: macsmc-battery,
+macsmc_hwmon temps/fans/power; elsewhere: coretemp/k10temp/acpi etc.).
+
+  mac-stats                       # JSON for waybar (default text: CPU% temp power)
+  mac-stats --format '{cpu}% {mem}% {temp}°'
+  mac-stats --plain               # human-readable dump (debug: shows every sensor found)
+Env SYSFS=/path lets tests point it at a fake /sys tree; PROC likewise for /proc.
+"""
+import glob, json, os, sys, time
+
+SYS = os.environ.get("SYSFS", "/sys")
+PROC = os.environ.get("PROC", "/proc")
+STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "mac-stats.cpu")
+
+
+def rd(path, default=None):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def num(path, default=None):
+    v = rd(path)
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def cpu_percent():
+    line = rd(f"{PROC}/stat", "").splitlines()[0].split()[1:]
+    vals = [int(x) for x in line]
+    idle, total = vals[3] + (vals[4] if len(vals) > 4 else 0), sum(vals)
+    prev = rd(STATE)
+    try:
+        with open(STATE, "w") as f:
+            f.write(f"{idle} {total}")
+    except OSError:
+        pass
+    if prev:
+        pi, pt = map(int, prev.split())
+        dt = total - pt
+        if dt > 0:
+            return max(0.0, min(100.0, 100.0 * (1 - (idle - pi) / dt)))
+    return 100.0 * (1 - idle / total) if total else 0.0
+
+
+def memory():
+    m = {}
+    for l in rd(f"{PROC}/meminfo", "").splitlines():
+        k, v = l.split(":", 1)
+        m[k] = int(v.split()[0])
+    tot, avail = m.get("MemTotal", 0), m.get("MemAvailable", 0)
+    swap_used = m.get("SwapTotal", 0) - m.get("SwapFree", 0)
+    return (100.0 * (tot - avail) / tot if tot else 0.0), (tot - avail) / 1048576, tot / 1048576, swap_used / 1048576
+
+
+def hwmon():
+    temps, fans, powers = [], [], []
+    for h in sorted(glob.glob(f"{SYS}/class/hwmon/hwmon*")):
+        name = rd(f"{h}/name", os.path.basename(h))
+        for t in glob.glob(f"{h}/temp*_input"):
+            v = num(t)
+            if v is None or v <= 0 or v > 150000:
+                continue
+            label = rd(t.replace("_input", "_label"), os.path.basename(t)[:-6])
+            temps.append((name, label, v / 1000))
+        for fn in glob.glob(f"{h}/fan*_input"):
+            v = num(fn)
+            if v is not None:
+                fans.append((name, rd(fn.replace("_input", "_label"), os.path.basename(fn)[:-6]), v))
+        for p in glob.glob(f"{h}/power*_input"):
+            v = num(p)
+            if v is not None:
+                powers.append((name, rd(p.replace("_input", "_label"), os.path.basename(p)[:-6]), v / 1e6))
+    return temps, fans, powers
+
+
+def cpu_temp(temps):
+    if not temps:
+        return None
+    keys = ("cpu", "pacc", "eacc", "soc", "package", "tctl", "core", "die")
+    pref = [t for t in temps if any(k in f"{t[0]} {t[1]}".lower() for k in keys)]
+    return max(t[2] for t in (pref or temps))
+
+
+def battery():
+    for p in sorted(glob.glob(f"{SYS}/class/power_supply/*")):
+        if rd(f"{p}/type") != "Battery" or rd(f"{p}/scope") == "Device":
+            continue
+        b = {"name": os.path.basename(p), "capacity": num(f"{p}/capacity"), "status": rd(f"{p}/status", "?"),
+             "cycles": num(f"{p}/cycle_count"), "limit": num(f"{p}/charge_control_end_threshold"),
+             "behaviour": rd(f"{p}/charge_behaviour")}
+        full = num(f"{p}/charge_full") or num(f"{p}/energy_full")
+        design = num(f"{p}/charge_full_design") or num(f"{p}/energy_full_design")
+        b["health"] = 100.0 * full / design if full and design else None
+        pw = num(f"{p}/power_now")
+        if pw is None:
+            i, v = num(f"{p}/current_now"), num(f"{p}/voltage_now")
+            pw = abs(i * v) / 1e6 if i is not None and v is not None else None
+        b["watts"] = abs(pw) / 1e6 if pw is not None else None
+        tte = num(f"{p}/time_to_empty_now")
+        b["time_to_empty_min"] = tte / 60 if tte else None
+        return b
+    return None
+
+
+def system_power(powers, bat):
+    sys_p = [p for p in powers if any(k in p[1].lower() for k in ("system", "total", "heatpipe", "dc in"))]
+    if sys_p:
+        return max(p[2] for p in sys_p)
+    return bat["watts"] if bat and bat.get("watts") is not None else None
+
+
+def main():
+    fmt = "{cpu}% {temp}° {power}W"
+    if "--format" in sys.argv:
+        fmt = sys.argv[sys.argv.index("--format") + 1]
+    cpu = cpu_percent()
+    memp, memu, memt, swapu = memory()
+    temps, fans, powers = hwmon()
+    t = cpu_temp(temps)
+    bat = battery()
+    pw = system_power(powers, bat)
+    load = rd(f"{PROC}/loadavg", "0 0 0").split()[:3]
+    vals = {"cpu": f"{cpu:.0f}", "mem": f"{memp:.0f}", "temp": f"{t:.0f}" if t is not None else "–",
+            "power": f"{pw:.1f}" if pw is not None else "–", "fan": f"{max(f[2] for f in fans):.0f}" if fans else "–",
+            "bat": f"{bat['capacity']:.0f}" if bat and bat.get("capacity") is not None else "–"}
+    text = fmt.format(**vals)
+
+    tip = [f"CPU        {cpu:5.1f}%   load {' '.join(load)}",
+           f"Memory     {memp:5.1f}%   {memu:.1f} / {memt:.1f} GiB" + (f"   swap {swapu:.1f} GiB" if swapu > 0.05 else "")]
+    if t is not None:
+        tip.append(f"CPU temp   {t:5.1f} °C")
+    for name, label, rpm in fans:
+        tip.append(f"Fan        {rpm:5.0f} rpm  ({label})")
+    if pw is not None:
+        tip.append(f"Power      {pw:5.1f} W")
+    if bat:
+        line = f"Battery    {bat['capacity']:.0f}% {bat['status']}"
+        if bat.get("time_to_empty_min") and bat["status"] == "Discharging":
+            line += f"  ~{int(bat['time_to_empty_min'] // 60)}h{int(bat['time_to_empty_min'] % 60):02d}m"
+        tip.append(line)
+        extra = []
+        if bat.get("health"):
+            extra.append(f"health {bat['health']:.0f}%")
+        if bat.get("cycles"):
+            extra.append(f"{bat['cycles']:.0f} cycles")
+        if bat.get("limit") and bat["limit"] < 100:
+            extra.append(f"charge limit {bat['limit']:.0f}%")
+        if bat.get("behaviour") and "[inhibit-charge]" in bat["behaviour"]:
+            extra.append("charging paused (limit)")
+        if extra:
+            tip.append("           " + ", ".join(extra))
+    if temps:
+        hot = sorted(temps, key=lambda x: -x[2])[:6]
+        tip.append("Hottest    " + ", ".join(f"{l} {v:.0f}°" for _, l, v in hot))
+    cls = "critical" if (t or 0) >= 90 else "warning" if (t or 0) >= 75 or cpu >= 90 else "normal"
+
+    if "--plain" in sys.argv:
+        print(text)
+        print("\n".join(tip))
+        print("\nall temps:", temps, "\nfans:", fans, "\npowers:", powers, "\nbattery:", bat)
+        return
+    print(json.dumps({"text": text, "tooltip": "\n".join(tip), "class": cls, "percentage": int(cpu)}))
+
+
+if __name__ == "__main__":
+    main()

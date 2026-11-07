@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""mac-stats-detail: one JSON snapshot for the Mac Stats plasmoid dropdown (Stats/iStat-style).
+
+CPU split + per-core, top processes by CPU and memory, memory breakdown + pressure,
+network rates/totals/addresses, sensors (via mac-stats). Deltas use a shared state file;
+calls within 1.5 s of the last sample reuse it, so several panel instances share one sample.
+"""
+import importlib.machinery, importlib.util, json, os, re, socket, struct, time
+
+RUN = os.environ.get("XDG_RUNTIME_DIR", "/tmp")
+STATE = os.path.join(RUN, "mac-stats-detail.json")
+SKIP_NET = ("lo", "docker", "veth", "br-", "virbr", "tailscale")
+CLK = os.sysconf("SC_CLK_TCK")
+PAGE = os.sysconf("SC_PAGE_SIZE")
+
+_l = importlib.machinery.SourceFileLoader("macstats", os.path.expanduser("~/.local/bin/mac-stats"))
+_s = importlib.util.spec_from_loader("macstats", _l)
+ms = importlib.util.module_from_spec(_s)
+_l.exec_module(ms)
+
+
+def rd(p, d=""):
+    try:
+        with open(p) as f:
+            return f.read()
+    except OSError:
+        return d
+
+
+def cpu_times():
+    out = {}
+    for line in rd("/proc/stat").splitlines():
+        if line.startswith("cpu"):
+            k, *v = line.split()
+            out[k] = [int(x) for x in v[:8]]
+    return out
+
+
+def procs():
+    out = {}
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        s = rd(f"/proc/{pid}/stat")
+        if not s:
+            continue
+        r = s.rfind(")")
+        name = s[s.find("(") + 1:r]
+        f = s[r + 2:].split()
+        out[pid] = (name, int(f[11]) + int(f[12]), int(f[21]) * PAGE)
+    return out
+
+
+APP_DIRS = [os.path.expanduser("~/.local/share/applications"), "/usr/local/share/applications",
+            "/usr/share/applications", "/var/lib/flatpak/exports/share/applications"]
+APP_INDEX = os.path.join(RUN, "mac-stats-apps.json")
+
+
+def app_index():
+    """lowercase key -> [Name, Icon] from .desktop files; cached, rebuilt when a dir changes."""
+    stamp = [os.stat(d).st_mtime if os.path.isdir(d) else 0 for d in APP_DIRS]
+    try:
+        c = json.loads(rd(APP_INDEX, "{}"))
+        if c.get("stamp") == stamp:
+            return c["idx"]
+    except ValueError:
+        pass
+    idx, weak = {}, {}
+    for d in reversed(APP_DIRS):            # later (user) dirs override system ones
+        if not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            if not fn.endswith(".desktop"):
+                continue
+            e, sect = {}, False
+            for line in rd(os.path.join(d, fn)).splitlines():
+                if line.startswith("["):
+                    if sect:
+                        break
+                    sect = line.strip() == "[Desktop Entry]"
+                elif sect and "=" in line:
+                    k, v = line.split("=", 1)
+                    e.setdefault(k.strip(), v.strip())
+            if not e.get("Name") or e.get("Type", "Application") != "Application":
+                continue
+            val = [e["Name"], e.get("Icon", "application-x-executable")]
+            fid = fn[:-8]
+            exe = os.path.basename((e.get("TryExec") or e.get("Exec", "").split(" ")[0]).strip('"'))
+            keys = {fid, fid.split(".")[-1], exe, e.get("StartupWMClass", "")}
+            target = weak if e.get("NoDisplay") == "true" else idx
+            for k in keys:
+                if k:
+                    target[k.lower()] = val
+    for k, v in weak.items():
+        idx.setdefault(k, v)
+    tmp = APP_INDEX + f".{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump({"stamp": stamp, "idx": idx}, f)
+    os.replace(tmp, APP_INDEX)
+    return idx
+
+
+def lookup(idx, *cands):
+    for c in cands:
+        if c and c.lower() in idx:
+            return idx[c.lower()]
+    return None
+
+
+def exe_of(pid):
+    try:
+        return os.path.basename(os.readlink(f"/proc/{pid}/exe")).replace(" (deleted)", "")
+    except OSError:
+        return ""
+
+
+def group_of(pid, comm, cache):
+    """(key, leader pid, scope id) — whole apps by their systemd app scope, terminal commands alone."""
+    cg = rd(f"/proc/{pid}/cgroup").strip().split("::", 1)[-1]
+    if not cg or cg == "/":
+        return ("kernel", None, None)
+    if "/tab(" in cg or "/main.scope" in cg and "konsole" not in cg:
+        return ("cmd:" + comm, pid, None)
+    m = re.search(r"/app-([^/]+?)(?:-(\d+))?\.scope", cg) or re.search(r"/app-([^/@]+?)(?:@[^/]*)?\.service", cg)
+    if m:
+        g = m.groups() + (None,)
+        return ("app:" + m.group(0), g[1], g[0])
+    m = re.search(r"/session\.slice/([^/]+)\.service", cg) or re.search(r"/([^/]+)\.service$", cg)
+    if m:
+        return ("svc:" + m.group(1), None, m.group(1))
+    return ("cmd:" + comm, pid, None)
+
+
+ALIASES = {"plasma-kwin_wayland": ["KWin", "kwin"], "plasma-kwin_wayland_wrapper": ["KWin", "kwin"],
+           "pipewire": ["PipeWire", "audio-card"], "wireplumber": ["PipeWire", "audio-card"],
+           "pipewire-pulse": ["PipeWire", "audio-card"]}
+
+
+def label(key, leader, scope, comm, pid, idx):
+    if key == "kernel":
+        return ["kernel_task", "computer"]
+    if key.startswith("cmd:"):
+        exe = exe_of(pid)
+        name = exe if len(comm) >= 15 and exe.startswith(comm) else comm   # comm is cut at 15 chars
+        return [name, "utilities-terminal"]
+    if scope in ALIASES:
+        return ALIASES[scope]
+    cands = []
+    if leader:
+        cands += [exe_of(leader), rd(f"/proc/{leader}/comm").strip()]
+    cands += [exe_of(pid), comm]
+    if scope:
+        s2 = re.sub(r"^(plasma-|app-)", "", scope)
+        cands += [scope, s2, s2.split(".")[-1]]
+    hit = lookup(idx, *cands)
+    return hit or [exe_of(pid) or comm, "application-x-executable"]
+
+
+def net_ifaces():
+    out = {}
+    for line in rd("/proc/net/dev").splitlines()[2:]:
+        k, v = line.split(":", 1)
+        k = k.strip()
+        v = v.split()
+        out[k] = (int(v[0]), int(v[8]))
+    return out
+
+
+def ipv4(ifname):
+    for line in os.popen(f"ip -4 -o addr show dev {ifname} 2>/dev/null"):
+        return line.split()[3].split("/")[0]
+    return ""
+
+
+def default_iface():
+    for line in rd("/proc/net/route").splitlines()[1:]:
+        f = line.split()
+        if f[1] == "00000000" and not f[0].startswith(SKIP_NET):
+            return f[0], socket.inet_ntoa(struct.pack("<L", int(f[2], 16)))
+    return "", ""
+
+
+def meminfo():
+    m = {}
+    for line in rd("/proc/meminfo").splitlines():
+        k, v = line.split(":")
+        m[k] = int(v.split()[0]) * 1024
+    return m
+
+
+def pressure():
+    for line in rd("/proc/pressure/memory").splitlines():
+        if line.startswith("some"):
+            return float(line.split()[1].split("=")[1])
+    return 0.0
+
+
+def zram():
+    comp = orig = 0
+    for d in os.listdir("/sys/block"):
+        if d.startswith("zram"):
+            f = rd(f"/sys/block/{d}/mm_stat").split()
+            if len(f) >= 3:
+                orig += int(f[0]); comp += int(f[2])
+    return orig, comp
+
+
+def sample():
+    now = time.time()
+    try:
+        prev = json.loads(rd(STATE, "{}"))
+    except ValueError:
+        prev = {}
+    if prev.get("out") and now - prev.get("t", 0) < 1.5:
+        return prev["out"]
+
+    ct, pr, nf = cpu_times(), procs(), net_ifaces()
+    dt = max(1e-3, now - prev.get("t", 0)) if prev.get("t") else None
+    pct = prev.get("cpu", {})
+
+    def split(k):
+        a, b = pct.get(k), ct.get(k)
+        if not a or not b:
+            return 0.0, 0.0, 0.0
+        d = [y - x for x, y in zip(a, b)]
+        tot = sum(d) or 1
+        user, sys_ = d[0] + d[1], d[2] + d[5] + d[6]
+        idle = d[3] + d[4]
+        return 100 * user / tot, 100 * sys_ / tot, 100 * (1 - idle / tot)
+
+    u, s, tot = split("cpu")
+    cores = [round(split(k)[2], 1) for k in sorted((k for k in ct if k != "cpu"), key=lambda k: int(k[3:]))]
+
+    # Top processes grouped by app (systemd app scopes), labelled with the app's name + icon.
+    pp = prev.get("procs", {})
+    idx = app_index()
+    cpu_by, mem_by, labels, resolved = {}, {}, {}, {}
+    for pid, (comm, ticks, rss) in pr.items():
+        key, leader, scope = group_of(pid, comm, None)
+        if key not in resolved:
+            lb = label(key, leader, scope, comm, pid, idx)
+            resolved[key] = lb[0]
+            labels.setdefault(lb[0], lb)
+        key = resolved[key]
+        mem_by[key] = mem_by.get(key, 0) + rss
+        if dt and pid in pp and pp[pid][0] == comm:
+            c = 100 * (ticks - pp[pid][1]) / CLK / dt
+            if c > 0:
+                cpu_by[key] = cpu_by.get(key, 0) + c
+    top_cpu = [labels[k] + [round(v, 1)] for k, v in sorted(cpu_by.items(), key=lambda x: -x[1])[:5]]
+    top_mem = [labels[k] + [v] for k, v in sorted(mem_by.items(), key=lambda x: -x[1])[:5]]
+
+    # Per-app network rates from nethogs-feed.service (root packet capture), grouped like above.
+    net_by = {}
+    try:
+        nh = json.loads(rd("/run/mac-stats/net.json", "{}"))
+    except ValueError:
+        nh = {}
+    if nh and now - nh.get("t", 0) < 6:
+        for pid, up, down in nh.get("procs", []):
+            pid = str(pid)
+            if pid == "0" or pid not in pr:
+                labels.setdefault("Other", ["Other", "network-wired"])
+                key = "Other"
+            else:
+                comm = pr[pid][0]
+                k, leader, scope = group_of(pid, comm, None)
+                if k not in resolved:
+                    lb = label(k, leader, scope, comm, pid, idx)
+                    resolved[k] = lb[0]
+                    labels.setdefault(lb[0], lb)
+                key = resolved[k]
+            a = net_by.setdefault(key, [0, 0])
+            a[0] += up; a[1] += down
+    top_net = [labels[k] + v for k, v in sorted(net_by.items(), key=lambda x: -(x[1][0] + x[1][1]))[:5]]
+
+    m = meminfo()
+    total, avail = m["MemTotal"], m["MemAvailable"]
+    zo, zc = zram()
+    app = m.get("AnonPages", 0)
+    wired = m.get("SUnreclaim", 0) + m.get("KernelStack", 0) + m.get("PageTables", 0)
+    cached = max(0, m.get("Cached", 0) + m.get("Buffers", 0) + m.get("SReclaimable", 0) - m.get("Shmem", 0))
+
+    # Network: default-route interface, rates from all real interfaces.
+    pn = prev.get("net", {})
+    rx = sum(v[0] for k, v in nf.items() if not k.startswith(SKIP_NET))
+    tx = sum(v[1] for k, v in nf.items() if not k.startswith(SKIP_NET))
+    rxr = txr = 0.0
+    if dt and "rx" in pn:
+        rxr, txr = max(0, (rx - pn["rx"]) / dt), max(0, (tx - pn["tx"]) / dt)
+    iface, gw = default_iface()
+
+    temps, fans, powers = ms.hwmon()
+    bat = ms.battery()
+    hot = sorted(temps, key=lambda x: -x[2])[:5]
+
+    out = {
+        "cpu": {"total": round(tot, 1), "user": round(u, 1), "system": round(s, 1),
+                "load": rd("/proc/loadavg", "0 0 0").split()[:3], "cores": cores,
+                "top": top_cpu},
+        "mem": {"total": total, "used": total - avail, "app": app, "wired": wired, "cached": cached,
+                "shmem": m.get("Shmem", 0), "compressed": zc, "swapped": zo,
+                "swapUsed": m["SwapTotal"] - m["SwapFree"], "swapTotal": m["SwapTotal"],
+                "pressure": round(pressure(), 1), "percent": round(100 * (total - avail) / total, 1),
+                "top": top_mem},
+        "net": {"rx": rxr, "tx": txr, "rxTotal": rx, "txTotal": tx, "iface": iface,
+                "ip": ipv4(iface) if iface else "", "gateway": gw,
+                "tailscale": ipv4("tailscale0"), "top": top_net, "perApp": bool(nh)},
+        "sensors": {"cpuTemp": ms.cpu_temp(temps), "power": ms.system_power(powers, bat),
+                    "fans": [[l, r] for _, l, r in fans], "hot": [[l, round(v)] for _, l, v in hot],
+                    "battery": bat},
+    }
+    tmp = STATE + f".{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump({"t": now, "cpu": ct, "procs": {k: [v[0], v[1]] for k, v in pr.items()},
+                   "net": {"rx": rx, "tx": tx}, "out": out}, f)
+    os.replace(tmp, STATE)
+    return out
+
+
+if __name__ == "__main__":
+    print(json.dumps(sample()))

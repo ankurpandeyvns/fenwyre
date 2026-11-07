@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""quicklook: macOS-style Quick Look via GNOME Sushi (org.gnome.NautilusPreviewer).
+
+  quicklook FILE...          preview FILE (Space again on the same file closes it)
+  quicklook --daemon         arrow-key navigation: answers Sushi's SelectionEvent by showing
+                             the previous/next file (within the selection if several files were
+                             passed, else within the folder, sorted like Dolphin: folders first,
+                             natural case-insensitive names, hidden files skipped)
+
+Bound to Space in Dolphin (service menu) and on the desktop.
+"""
+import json, os, re, sys
+from pathlib import Path
+
+import gi
+from gi.repository import Gio, GLib
+
+BUS, PATH, IFACE = "org.gnome.NautilusPreviewer", "/org/gnome/NautilusPreviewer", "org.gnome.NautilusPreviewer2"
+STATE = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "quicklook.json"
+
+
+def to_path(arg):
+    # Plasma's desktop hands over KIO "desktop:/Name" URLs (QUrl pretty form: only "%" stays encoded).
+    if arg.startswith("desktop:"):
+        from urllib.parse import unquote
+        desk = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP) or str(Path.home() / "Desktop")
+        return Path(desk) / unquote(arg[len("desktop:"):].lstrip("/"))
+    if "://" in arg:
+        return Path(Gio.File.new_for_uri(arg).get_path() or arg)
+    return Path(arg).absolute()
+
+
+def show(bus, path, close_if_shown, token=""):
+    bus.call_sync(BUS, PATH, IFACE, "ShowFile",
+                  GLib.Variant("(ssbs)", (path.as_uri(), "", close_if_shown, token)),
+                  None, Gio.DBusCallFlags.NONE, 5000, None)
+
+
+def natural(name):
+    return [int(t) if t.isdigit() else t.casefold() for t in re.split(r"(\d+)", name)]
+
+
+def siblings(path):
+    try:
+        entries = [p for p in path.parent.iterdir() if not p.name.startswith(".")]
+    except OSError:
+        return [path]
+    return sorted(entries, key=lambda p: (not p.is_dir(), natural(p.name)))
+
+
+def save(current, selection):
+    STATE.write_text(json.dumps({"current": str(current), "selection": [str(p) for p in selection]}))
+
+
+def preview(args):
+    files = [to_path(a) for a in args]
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+    save(files[0], files if len(files) > 1 else [])
+    show(bus, files[0], True, os.environ.get("XDG_ACTIVATION_TOKEN", ""))
+
+
+def daemon():
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION)
+
+    def on_event(_conn, _sender, _path, _iface, _signal, params):
+        direction = params.unpack()[0]          # GtkDirectionType: 2 up, 3 down, 4 left, 5 right
+        step = -1 if direction in (1, 2, 4) else 1
+        try:
+            st = json.loads(STATE.read_text())
+        except (OSError, ValueError):
+            return
+        cur = Path(st["current"])
+        pool = [Path(p) for p in st.get("selection") or []] or siblings(cur)
+        if cur not in pool:
+            return
+        nxt = pool[(pool.index(cur) + step) % len(pool)]
+        st["current"] = str(nxt)
+        STATE.write_text(json.dumps(st))
+        try:
+            show(bus, nxt, False)
+        except GLib.Error:
+            pass
+
+    bus.signal_subscribe(None, IFACE, "SelectionEvent", PATH, None, Gio.DBusSignalFlags.NONE, on_event)
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["--daemon"]:
+        daemon()
+    elif len(sys.argv) > 1:
+        preview(sys.argv[1:])

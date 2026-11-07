@@ -1,0 +1,10 @@
+[Unit]
+Description=Give menu bar, dock and popups the same glass tint
+Before=plasma-plasmashell.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/plasma-sync-glass
+
+[Install]
+WantedBy=plasma-workspace.target

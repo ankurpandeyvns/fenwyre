@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Keep every glass surface (menu bar, dock, popups such as Control Center) on one tint per theme.
+
+KWin's blur strength is global; what makes surfaces look different is each SVG's tint layer.
+For each theme below, the tint of the panel and dialog backgrounds' "center" element (and every
+frame part sharing that exact tint) is replaced with the theme's tint. Idempotent; run at login
+by ~/.config/systemd/user/plasma-sync-glass.service, before plasmashell. Spotlight
+(net.local.spotlight) uses the same values.
+"""
+import gzip, re, shutil
+from pathlib import Path
+
+THEMES = Path.home() / ".local/share/plasma/desktoptheme"
+TINT = {  # theme -> (opacity, fill); matches the theme's text colour
+    "WhiteSur-dark": ("0.45", "#000000"),
+    "WhiteSur": ("0.45", "#000000"),  # the light Plasma theme still uses white text
+}
+FILES = ["widgets/panel-background.svgz", "dialogs/background.svgz"]
+BACKUP = Path.home() / "kde-pre-mac-backup/glass-sync"
+changed = False
+for theme, (op, fill) in TINT.items():
+    for rel in FILES:
+        p = THEMES / theme / rel
+        if not p.exists():
+            continue
+        s = gzip.open(p).read().decode()
+        m = re.search(r'<(?:rect|path)[^>]*\bid="center"[^>]*>', s)
+        st = m and re.search(r'opacity:([0-9.]+);fill:(#[0-9a-fA-F]{6})', m.group(0))
+        if not st or (st.group(1), st.group(2).lower()) == (op, fill):
+            continue
+        b = BACKUP / theme / rel
+        if not b.exists():
+            b.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, b)
+        s = s.replace(st.group(0), f"opacity:{op};fill:{fill}")
+        gzip.open(p, "wb").write(s.encode())
+        print(f"{theme}/{rel}: {st.group(0)} -> opacity:{op};fill:{fill}")
+        changed = True
+if changed:
+    for c in (Path.home() / ".cache").glob("plasma_theme_WhiteSur*.kcache"):
+        c.unlink()

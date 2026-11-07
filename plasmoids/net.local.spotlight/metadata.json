@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "net.local.spotlight",
+    "Name": "Spotlight",
+    "Description": "macOS-style Spotlight launcher (apps, calculator, unit and currency conversion) on KRunner's search engine",
+    "Icon": "search",
+    "Authors": [{ "Name": "local" }],
+    "Version": "1.0",
+    "License": "MIT"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPackageStructure": "Plasma/Applet"
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Put Logitech keyboards (MX Keys etc.) into macOS mode on connect
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/logi-macmode
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target

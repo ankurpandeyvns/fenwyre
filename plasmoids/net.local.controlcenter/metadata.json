@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "net.local.controlcenter",
+    "Name": "Control Center",
+    "Description": "macOS-style Control Center: Wi-Fi, Bluetooth, Focus, Display, Sound, Now Playing, Battery",
+    "Icon": "preferences-system",
+    "Authors": [{ "Name": "local" }],
+    "Version": "1.0",
+    "License": "MIT"
+  },
+  "X-Plasma-API-Minimum-Version": "6.0",
+  "KPackageStructure": "Plasma/Applet"
+}

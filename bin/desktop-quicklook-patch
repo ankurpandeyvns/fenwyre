@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Keep a patched copy of Plasma's desktop containment that opens Quick Look on Space.
+
+Plasma prefers ~/.local/share/plasma/plasmoids/<id> over /usr/share/plasma/plasmoids/<id>.
+This rebuilds the local copy from the installed package whenever the installed FolderView.qml
+changes (Plasma updates), and removes the copy (stock desktop) if the patch no longer applies.
+Run at login before plasmashell (desktop-quicklook-patch.service). Prints what it did.
+"""
+import hashlib, shutil, sys
+from pathlib import Path
+
+PKG = "org.kde.desktopcontainment"
+SYS = Path("/usr/share/plasma/plasmoids") / PKG
+LOCAL = Path.home() / ".local/share/plasma/plasmoids" / PKG
+STAMP = LOCAL / ".quicklook-source-sha256"
+QML = "contents/ui/FolderView.qml"
+
+ANCHOR_KEYS = """                Keys.onPressed: event => {
+                    // Start by assuming we might handle it
+                    event.accepted = true;
+"""
+SPACE = """
+                    // Quick Look (local patch: ~/.local/bin/desktop-quicklook-patch)
+                    if (event.key === Qt.Key_Space && event.modifiers === Qt.NoModifier && dir.hasSelection()) {
+                        const urls = [];
+                        for (let r = 0; r < dir.rowCount(); r++) {
+                            if (dir.isSelected(r)) {
+                                urls.push(String(dir.data(dir.index(r, 0), 262)));   // FolderModel::UrlRole
+                            }
+                        }
+                        const q = s => "'" + s.replace(/'/g, "'\\\\''") + "'";
+                        quickLookRunner.connectSource("@QUICKLOOK@ " + urls.map(q).join(" "));
+                        return;
+                    }
+"""
+ANCHOR_ROOT_IMPORT = "import QtQuick\n"
+IMPORT = "import org.kde.plasma.plasma5support as P5Support\n"
+RUNNER = """
+    P5Support.DataSource {   // Quick Look launcher (local patch)
+        id: quickLookRunner
+        engine: "executable"
+        connectedSources: []
+        onNewData: (source, data) => disconnectSource(source)
+    }
+"""
+
+
+def sha(p):
+    return hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def remove(reason):
+    if LOCAL.exists():
+        shutil.rmtree(LOCAL)
+    print(f"removed local override ({reason}); stock desktop in use")
+
+
+def main():
+    src = SYS / QML
+    if not src.exists():
+        return remove("system package missing")
+    want = sha(src)
+    if STAMP.exists() and STAMP.read_text().strip() == want and (LOCAL / QML).exists():
+        print("up to date")
+        return
+
+    text = src.read_text()
+    if text.count(ANCHOR_KEYS) != 1 or ANCHOR_ROOT_IMPORT not in text:
+        return remove("FolderView.qml changed shape; patch not applied")
+
+    text = text.replace(ANCHOR_ROOT_IMPORT, ANCHOR_ROOT_IMPORT + IMPORT, 1)
+    text = text.replace(ANCHOR_KEYS, ANCHOR_KEYS + SPACE.replace("@QUICKLOOK@", str(Path.home() / ".local/bin/quicklook")), 1)
+    # Runner goes right before the file's final closing brace (root item scope).
+    cut = text.rstrip().rfind("}")
+    text = text[:cut] + RUNNER + text[cut:]
+
+    tmp = LOCAL.with_name(PKG + ".tmp")
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    shutil.copytree(SYS, tmp)
+    (tmp / QML).write_text(text)
+    (tmp / ".quicklook-source-sha256").write_text(want + "\n")
+    if LOCAL.exists():
+        shutil.rmtree(LOCAL)
+    tmp.rename(LOCAL)
+    print("patched local desktop containment")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

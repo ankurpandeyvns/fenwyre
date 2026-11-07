@@ -1,0 +1,11 @@
+[Unit]
+Description=Quick Look arrow-key navigation (answers Sushi SelectionEvent)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/quicklook --daemon
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
