@@ -3,7 +3,7 @@
 #   brightness-here up|down [step]
 # KWin's active output follows the mouse (kwinrc [Windows] ActiveMouseScreen, default true).
 set -uo pipefail
-dir=${1:-up}; step=${2:-5}
+dir=${1:-up}; step=${2:-${BRIGHTNESS_STEP:-10}}   # percent per key press
 out=$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null) || exit 1
 [ -n "$out" ] || exit 1
 
