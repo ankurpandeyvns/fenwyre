@@ -112,12 +112,15 @@ void main()
     float rollDeg = tween(twRoll, curvesA.y);
     float tiltDeg = tween(twTilt, curvesA.z);
     vec2 scroll = vec2(tween(twScrollX, curvesA.w), tween(twScrollY, curveScrollY));
-    float outH = min(sceneSize.y, sceneSize.x / aspect);           // whole screen, cover-fit
+    // "scale out" never shows the whole Mac screen: the tilted plane pulls back a little
+    // while its pixels dissolve, so the instant camera/scroll changes Apple's programs
+    // make between scenes happen while nothing is visible.
     float inH = 160.0 / max(aspect, 1.0);                          // ~160 px across the long edge
-    float viewHeight = exp(mix(log(outH), log(inH), e));
-    vec2 center = mix(sceneSize * 0.5, scroll, e);
-    float roll = -rollDeg * e * PI / 180.0;                        // camera -22.5 => rows rise to the right
-    float tilt = abs(tiltDeg) * e * PI / 180.0;
+    float viewHeight = inH * exp(mix(log(2.4), 0.0, e));
+    float vis = smoothstep(0.12, 0.85, e);
+    vec2 center = scroll;
+    float roll = -rollDeg * PI / 180.0;                            // camera -22.5 => rows rise to the right
+    float tilt = abs(tiltDeg) * PI / 180.0;
 
     vec2 p = vec2(sp.x * 2.0 - 1.0, 1.0 - sp.y * 2.0);
     vec2 d = vec2(p.x * aspect * persp, p.y * persp);
@@ -164,8 +167,8 @@ void main()
         sh *= (1.0 - tiny * 0.7);
     }
 
-    float fade = min(clamp(clock / fadeDur, 0.0, 1.0),
-                     clamp(1.0 - (clock - fadeOutStart) / fadeDur, 0.0, 1.0));
+    float fade = vis * min(clamp(clock / fadeDur, 0.0, 1.0),
+                           clamp(1.0 - (clock - fadeOutStart) / fadeDur, 0.0, 1.0));
     vec3 col = bg * (1.0 - shadowAmt * sh * fade);
     col = mix(col, inkColor.rgb, ink * fade * inkColor.a);
     fragColor = vec4(col, 1.0) * qt_Opacity;

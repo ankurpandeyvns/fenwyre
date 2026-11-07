@@ -109,6 +109,11 @@ step_settings() {
     kw --file spectaclerc --group ImageSave --key imageFilenameTemplate "Screenshot <yyyy>-<MM>-<dd> at <hh>.<mm>.<ss>"
     kw --file plasmaparc --group General --key AudioFeedback false
     kw --file konsolerc --group "Desktop Entry" --key DefaultProfile Mac.profile
+    # Lock screen: Macintosh live wallpaper behind the greeter (auto-lock / power settings are left alone)
+    kw --file kscreenlockerrc --group Greeter --key WallpaperPlugin net.local.macintosh
+    for kv in Colour=Spectrum Scene=Cycle Speed=0.75 PauseWhenCovered=false; do
+        kw --file kscreenlockerrc --group Greeter --group Wallpaper --group net.local.macintosh --group General --key "${kv%%=*}" "${kv#*=}"
+    done
     balooctl6 disable >/dev/null 2>&1 || true
 }
 

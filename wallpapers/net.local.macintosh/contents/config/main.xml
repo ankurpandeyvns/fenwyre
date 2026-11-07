@@ -25,5 +25,13 @@
       <label>Stop animating while a maximized or full-screen window is on this screen</label>
       <default>true</default>
     </entry>
+    <entry name="AnimateDesktop" type="Bool">
+      <label>Also animate on the desktop (by default only the lock screen animates and the desktop holds the frame it reached)</label>
+      <default>false</default>
+    </entry>
+    <entry name="FrozenAt" type="String">
+      <label>Internal: wall time (ms) of the frame the desktop holds</label>
+      <default></default>
+    </entry>
   </group>
 </kcfg>

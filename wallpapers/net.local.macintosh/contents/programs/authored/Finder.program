@@ -4,7 +4,8 @@
 //
 //  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
 //  IconGarden.program / System6ControlPanel.program. Extensions used beyond
-//  Apple's command set are marked [ext].
+//  Apple's command set are marked [ext]. The drag of "Empty Folder" into the
+//  Trash follows Apple's FolderIcon/TrashIcon sprite strips.
 //
 //-------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -14,7 +15,16 @@ start simultaneous
 	let cursor = "None"
 	let ramp = "None"
 	add radiobuttongroup
-	add selectable at 292, 182 size 60, 9 value 0 action "select"	// [ext] icon name highlight
+	add selectable at 292, 182 size 60, 9 value 0 action "select"	// [ext] "MacPaint 1.4" name highlight
+	add selectable at 424, 182 size 51, 9 value 0 action "select"	// [ext] "Happy Mac"
+	add selectable at 454, 70 size 36, 8 value 0 action "select"	// [ext] "Startup"
+	add button at 487, 141 size 13, 12 action "scrollUp"			// [ext] scroll arrows
+	add button at 487, 192 size 13, 12 action "scrollDown"
+	add button at 295, 103 size 12, 12 action "close"				// [ext] close box
+	add button at 37, 18 size 32, 18 action "menuFile"				// [ext] menu titles
+	add button at 73, 18 size 34, 18 action "menuEdit"
+	add button at 111, 18 size 41, 18 action "menuView"
+	add button at 155, 18 size 58, 18 action "menuSpecial"
 end simultaneous
 
 gosub window
@@ -38,15 +48,45 @@ window:
 		reset controls
 	end simultaneous
 
-	scroll to 470, 150 over 22 seconds async "scroll"
+	scroll to 470, 130 over 24 seconds async "scroll"
 	scale in over 3 seconds
 
-	wait for 1.5 seconds
-	mouse to 322, 160 over 2 seconds curve easeout
-	wait for 0.5 seconds
+	wait for 1 second
+	mouse to 322, 160 over 1.5 seconds curve easeout
+	wait for 0.4 seconds
 	mouse click
-	wait for 2 seconds
-	mouse to 470, 120 over 3 seconds curve easeout
+	wait for 0.25 seconds
+	mouse click
+
+	wait for 1.5 seconds
+	mouse to 380, 200 over 1.5 seconds curve easeinout
+	mouse to 449, 162 over 1.2 seconds curve easeout
+	wait for 0.4 seconds
+	mouse click
+
+	wait for 1.2 seconds
+	mouse to 493, 186 over 1.2 seconds curve easeout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.6 seconds
+	mouse up
+	wait for 0.4 seconds
+	mouse down
+	wait for 0.4 seconds
+	mouse up
+	wait for 0.5 seconds
+	mouse to 493, 136 over 1 second curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.7 seconds
+	mouse up
+
+	wait for 0.8 seconds
+	mouse to 470, 66 over 1.8 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+	wait for 1 second
+	mouse to 420, 40 over 1.5 seconds curve easeout
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds
@@ -60,14 +100,47 @@ menubar:
 	start simultaneous
 		let scene = "menubar"
 		let image = "FinderWindow"
-		let cursor = "None"
+		let cursor = "Automatic"
 		let ramp = "Left"
 		camera to 22.5, 45
+		mouse to 250, 45
 		scroll to 230, 40
+		reset controls
 	end simultaneous
 
-	scroll to 40, 40 over 16 seconds async "scroll"
+	scroll to 40, 40 over 18 seconds async "scroll"
 	scale in over 3 seconds
+
+	wait for 1 second
+	mouse to 184, 10 over 2.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.5 seconds
+	mouse up
+
+	wait for 1.2 seconds
+	mouse to 131, 9 over 1.5 seconds curve easeinout
+	wait for 0.2 seconds
+	mouse down
+	wait for 0.4 seconds
+	mouse up
+
+	wait for 1.4 seconds
+	mouse to 90, 10 over 1.4 seconds curve easeinout
+	wait for 0.2 seconds
+	mouse down
+	wait for 0.5 seconds
+	mouse up
+
+	wait for 1.2 seconds
+	mouse to 53, 9 over 1.2 seconds curve easeinout
+	wait for 0.2 seconds
+	mouse down
+	wait for 0.6 seconds
+	mouse up
+
+	wait for 0.6 seconds
+	mouse to 30, 60 over 2 seconds curve easeout
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds
@@ -81,15 +154,44 @@ trash:
 	start simultaneous
 		let scene = "trash"
 		let image = "FinderTrash"
-		let cursor = "None"
+		let cursor = "Automatic"
 		let ramp = "Down"
 		camera to -22.5, 45
-		scroll to 455, 110
+		mouse to 380, 120
+		scroll to 455, 120
 		reset controls
+		add icon at 417, 184 value 30 name "FolderIcon" frames "0" id "folder"			// [ext] id
+		add icon at 417, 184 value 8 name "FolderIcon" frames "2,3" id "outline"
+		add icon at 440, 328 value 30 name "TrashIcon" frames "0" id "trash"
 	end simultaneous
+	hide "outline"																	// [ext] show/hide/frame/move
 
-	scroll to 455, 300 over 18 seconds async "scroll"
+	scroll to 455, 300 over 22 seconds async "scroll"
 	scale in over 3 seconds
+
+	wait for 1 second
+	mouse to 449, 160 over 1.5 seconds curve easeout
+	wait for 0.4 seconds
+	mouse click
+	frame "folder" to 1
+	wait for 0.8 seconds
+
+	mouse down
+	show "outline"
+	start simultaneous
+		mouse to 470, 300 over 9 seconds curve easeinout
+		move "outline" to 438, 324 over 9 seconds curve easeinout
+	end simultaneous
+	wait for 6.3 seconds
+	frame "trash" to 1
+	wait for 3.2 seconds
+	mouse up
+	hide "outline"
+	hide "folder"
+	frame "trash" to 3
+	wait for 0.6 seconds
+	mouse to 400, 300 over 1.5 seconds curve easeout
+	frame "trash" to 2
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds

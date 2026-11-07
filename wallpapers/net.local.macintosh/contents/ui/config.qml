@@ -13,6 +13,8 @@ Kirigami.FormLayout {
     property string cfg_Appearance
     property real cfg_Speed
     property bool cfg_PauseWhenCovered
+    property bool cfg_AnimateDesktop
+    property string cfg_FrozenAt
 
     readonly property var sceneModel: {
         var m = [{ value: "Cycle", text: "Cycle all scenes" }];
@@ -73,8 +75,14 @@ Kirigami.FormLayout {
         }
     }
     QQC2.CheckBox {
+        Kirigami.FormData.label: "Desktop:"
+        text: "Animate on the desktop too (macOS animates only on the lock screen)"
+        checked: root.cfg_AnimateDesktop
+        onToggled: root.cfg_AnimateDesktop = checked
+    }
+    QQC2.CheckBox {
         id: pauseBox
-        Kirigami.FormData.label: "Performance:"
+        enabled: root.cfg_AnimateDesktop
         text: "Pause while a maximized or full-screen window covers the screen"
         checked: root.cfg_PauseWhenCovered
         onToggled: root.cfg_PauseWhenCovered = checked

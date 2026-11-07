@@ -27,6 +27,8 @@ Item {
     }
 
     Timer { id: debounce; interval: 50; onTriggered: root.update() }
+    // safety net in case a model update is missed (window moved between screens, etc.)
+    Timer { interval: 3000; repeat: true; running: true; onTriggered: root.update() }
 
     TaskManager.VirtualDesktopInfo { id: vdInfo }
     TaskManager.ActivityInfo { id: actInfo }

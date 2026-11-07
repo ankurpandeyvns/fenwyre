@@ -116,6 +116,8 @@ function parseOpts(a) {
         else if (a.word("action")) o.action = a.str();
         else if (a.word("at")) o.at = a.pair();
         else if (a.word("frames")) o.frames = a.str();
+        else if (a.word("id")) o.id = a.str();
+        else if (a.word("to")) o.to = a.pair();
         else {
             var bad = a.peek();
             throw "unexpected '" + (bad.raw || bad.v) + "'";
@@ -128,8 +130,27 @@ function parseOpts(a) {
 
 var NUM_KEYS = ["scale", "roll", "tilt", "scrollX", "scrollY", "mouseX", "mouseY"];
 
-function Machine(host, program) {
+// Small seeded PRNG (mulberry32): the whole timeline is deterministic, so the lock
+// screen and the desktop compute identical frames independently.
+function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        var t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function Machine(host, program, sidecar, seed) {
     this.host = host;
+    this.rand = rng(seed || 1);
+    this.cur = 0;
+    // A sidecar runs an authored companion program alongside an Apple program: it may
+    // add controls and drive the mouse, but never touches the camera, image or ramp.
+    this.sidecar = !!sidecar;
+    this.byId = {};
     this.prog = program;
     this.t = 0;            // virtual clock (seconds)
     this.waitUntil = 0;    // time at which the next statement runs
@@ -181,6 +202,7 @@ Machine.prototype.animate = function (keys, targets, o, cur, defCurve) {
     var rec = { t0: cur, dur: dur };
     var cname = CURVES[o.curve] ? o.curve : defCurve;
     for (var i = 0; i < keys.length; ++i) {
+        if (this.sidecar && keys[i] !== "mouseX" && keys[i] !== "mouseY") continue;
         if (dur <= 0) {
             delete this.tweens[keys[i]];
             this.state[keys[i]] = targets[i];
@@ -205,6 +227,7 @@ Machine.prototype.step = function (dt) {
     }
     if (guard >= 2000) { this.log("runaway program (no waits?) - stopping"); this.finish(); }
     this.updateTweens(this.t);
+    this.updateMotions(this.t);
     this.interact();
     this.animateControls();
     this.updateCursor();
@@ -213,11 +236,12 @@ Machine.prototype.step = function (dt) {
 Machine.prototype.finish = function () {
     if (this.done) return;
     this.done = true;
-    this.host.hostProgramDone();
+    if (!this.sidecar) this.host.hostProgramDone(this.cur);
 };
 
 Machine.prototype.exec = function (cur) {
     if (this.pc >= this.prog.stmts.length) { this.finish(); return; }
+    this.cur = cur;
     var st = this.prog.stmts[this.pc++];
     try {
         this.run(st, cur);
@@ -305,6 +329,42 @@ Machine.prototype.run = function (st, cur) {
             this.mouseUp(cur);
         } else throw "expected to/down/up/click";
         break;
+    // ---- authored extensions: scripted control changes, addressed by `id "name"`
+    case "show":
+    case "hide": {
+        var cs = this.ctl(a.str());
+        this.setItem(cs, { shown: cmd === "show" });
+        break;
+    }
+    case "frame": { // frame "id" to N   (also stops an icon's own animation)
+        var cf = this.ctl(a.str());
+        a.expect("to");
+        var fr = Math.round(a.num());
+        if (cf.kind === "icon") cf.seq = [fr];
+        this.setItem(cf, { frame: fr });
+        break;
+    }
+    case "move": { // move "id" to x, y [over S] [curve C]   (bottom-left anchor)
+        var cm = this.ctl(a.str());
+        o = parseOpts(a);
+        if (!o.to) throw "move needs 'to x, y'";
+        var tx = o.to[0], ty = o.to[1] - cm.item.ch + 1;
+        var d = o.over || 0;
+        cm.mv = { fx: cm.item.cx, fy: cm.item.cy, tx: tx, ty: ty, t0: cur, dur: d,
+                  curve: CURVES[o.curve] || CURVES.linear };
+        if (d <= 0) { this.setItem(cm, { cx: tx, cy: ty }); cm.mv = null; }
+        else if (!this.batch) this.waitUntil = cur + d;
+        break;
+    }
+    case "reveal": { // reveal "id" over S : a cover shrinks from its left edge (typing)
+        var cr = this.ctl(a.str());
+        o = parseOpts(a);
+        var rd = o.over || 0;
+        cr.rv = { x0: cr.item.cx, w0: cr.item.cw, t0: cur, dur: rd };
+        if (rd <= 0) { this.setItem(cr, { shown: false }); cr.rv = null; }
+        else if (!this.batch) this.waitUntil = cur + rd;
+        break;
+    }
     case "gosub": {
         var label = a.anyWord();
         if (this.prog.labels[label] === undefined) throw "unknown label '" + label + "'";
@@ -332,18 +392,48 @@ Machine.prototype.run = function (st, cur) {
     if (a.more()) this.log("line " + st.line + ": ignoring trailing tokens in: " + st.text);
 };
 
+Machine.prototype.ctl = function (id) {
+    var c = this.byId[id];
+    if (!c) throw "no control with id '" + id + "'";
+    return c;
+};
+
+Machine.prototype.updateMotions = function (t) {
+    for (var i = 0; i < this.controls.length; ++i) {
+        var c = this.controls[i], p;
+        if (c.mv) {
+            p = Math.max(0, Math.min(1, (t - c.mv.t0) / c.mv.dur));
+            var k = c.mv.curve(p);
+            this.setItem(c, { cx: Math.round(c.mv.fx + (c.mv.tx - c.mv.fx) * k),
+                              cy: Math.round(c.mv.fy + (c.mv.ty - c.mv.fy) * k) });
+            if (p >= 1) c.mv = null;
+        }
+        if (c.rv) {
+            p = Math.max(0, Math.min(1, (t - c.rv.t0) / c.rv.dur));
+            var gone = Math.round(c.rv.w0 * p);
+            this.setItem(c, { cx: c.rv.x0 + gone, cw: c.rv.w0 - gone, shown: gone < c.rv.w0 });
+            if (p >= 1) c.rv = null;
+        }
+    }
+};
+
 Machine.prototype.setVar = function (key, v, cur) {
     switch (key) {
     case "image":
+        if (this.sidecar) break;
         this.state.image = String(v);
         this.host.hostSetImage(this.state.image);
         break;
     case "cursor": this.state.cursor = String(v); break;
     case "ramp":
+        if (this.sidecar) break;
         this.state.ramp = String(v);
         this.host.hostRamp(this.state.ramp, cur);
         break;
-    case "scene": this.state.scene = String(v); break;
+    case "scene":
+        this.state.scene = String(v);
+        if (!this.sidecar && this.host.hostScene) this.host.hostScene(this.state.scene, cur);
+        break;
     default:
         this.log("unknown variable '" + key + "' ignored");
     }
@@ -362,6 +452,8 @@ Machine.prototype.newControl = function (c, item) {
     c.item = it;
     c.index = this.host.hostAddControl(it);
     this.controls.push(c);
+    c.home = { cx: it.cx, cy: it.cy, cw: it.cw, ch: it.ch, shown: it.shown };
+    if (this._pendingId) { c.id = this._pendingId; this.byId[c.id] = c; this._pendingId = ""; }
     return c;
 };
 
@@ -381,14 +473,21 @@ function sprite(name) {
 
 Machine.prototype.addControl = function (kind, o) {
     var at = o.at || [0, 0], s, c;
+    this._pendingId = o.id || "";
     switch (kind) {
+    case "cover": { // authored extension: white rectangle hiding part of the image (see reveal)
+        var cvs = o.size || [16, 16];
+        this.newControl({ kind: "cover", initItem: null },
+                        { kind: "white", cx: at[0], cy: at[1] - cvs[1] + 1, cw: cvs[0], ch: cvs[1] });
+        break;
+    }
     case "icon":
         s = sprite(o.name);
         var seq = [];
         if (o.frames) seq = o.frames.split(",").map(function (x) { return parseInt(x, 10); })
                                      .filter(function (x) { return x >= 0 && x < s.frames; });
         if (!seq.length) for (var fi = 0; fi < s.frames; ++fi) seq.push(fi);
-        this.newControl({ kind: kind, period: o.value || 30, seq: seq },
+        this.newControl({ kind: kind, period: o.value || 30, seq: seq, seq0: seq },
                         { kind: "sprite", src: o.name, cx: at[0], cy: at[1] - s.fh + 1, cw: s.fw, ch: s.fh, fw: s.fw, fh: s.fh });
         break;
     case "caret": {
@@ -495,6 +594,9 @@ Machine.prototype.refreshSelectable = function (c) {
 Machine.prototype.resetControls = function () {
     for (var i = 0; i < this.controls.length; ++i) {
         var c = this.controls[i];
+        c.mv = null; c.rv = null;
+        if (c.home) this.setItem(c, c.home);
+        if (c.kind === "icon") c.seq = c.seq0;
         if (c.kind === "radio" || c.kind === "selectable") {
             c.selected = c.init; c.pressed = false;
             this.refreshSelectable(c);
@@ -652,7 +754,7 @@ Machine.prototype.puzzleMove = function (c) {
     if (col > 0) opts.push(b - 1);
     if (col < 3) opts.push(b + 1);
     var choices = opts.filter(function (x) { return x !== c.last; });
-    var m = choices[Math.floor(Math.random() * choices.length)];
+    var m = choices[Math.floor(this.rand() * choices.length)];
     c.perm[b] = c.perm[m];
     c.perm[m] = 0;
     c.last = b;
@@ -700,8 +802,9 @@ Machine.prototype.animateControls = function () {
         case "puzzle": {
             var mv = Math.floor(ticks / c.period);
             if (mv !== c.moves) {
+                // apply every move since the last update, whatever the step size
+                for (var n = 0; n < 64 && c.moves < mv; ++n) { c.moves++; this.puzzleMove(c); }
                 c.moves = mv;
-                this.puzzleMove(c);
                 this.setItem(c, { perm: c.perm.join(",") });
             }
             break;
