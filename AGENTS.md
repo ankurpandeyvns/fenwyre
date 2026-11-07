@@ -98,6 +98,10 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 - **mxkeys**: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`.
 - **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
 - **battery**: `battery-limit` shows the threshold; above it on AC, `charge_behaviour` is `auto-discharge`.
+  Fans (same feature, M1 Pro/Max/Ultra on Asahi): `modinfo -n macsmc_hwmon` is under `updates/`, a `macsmc_soc_die`
+  thermal zone exists, `/run/mac-fan/state.json` updates every 2 s; switch profile (`echo max >
+  /var/lib/mac-fan/profile`, then `apple`, then `macos`) and watch the rpm follow. After a kernel update, rerun
+  `system/fan/build-module` (the stock module comes back until then; mac-fand then leaves the fans to the SMC).
 - **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
   PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
   (`sudo timeout 4 btmon`, ~1 Mbps on air).

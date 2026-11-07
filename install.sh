@@ -41,7 +41,7 @@ konsole|Apps|Terminal profile|Konsole "Mac" profile with Source Code Pro for Pow
 helium|Apps|Helium hardware video|VA-API decode on Apple silicon (H.264/VP9) and an extension that hides AV1 so YouTube uses hardware decode|no
 mxkeys|Apps|Logitech Mac mode|Switch Logitech keyboards (MX Keys) to macOS layout at login and on every reconnect (Solaar)|no
 brightness|Apps|Brightness keys|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%)|no
-battery|System|Battery charge limit|AlDente-style limit (default 80%), survives reboots, discharges to the limit while plugged in (Asahi)|yes
+battery|System|Battery limit + fan profiles|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max)|yes
 audio|System|Bluetooth audio|LDAC locked at full bitrate; Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
 netstats|System|Per-app network + SF font|Root packet-capture feed for Mac Stats per-app network; SF Pro preferred over other sans fonts|yes
 windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size/position (agent creates them, see AGENTS.md)|no
@@ -60,7 +60,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
         helium)      echo helium ;;
         mxkeys)      echo mxkeys ;;
         brightness)  echo brightness ;;
-        battery)     echo battery ;;
+        battery)     echo battery fans ;;
         audio)       echo audio ;;
         netstats)    echo netfeed sffont ;;
         windows)     echo windows ;;
@@ -69,7 +69,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
 }
 # Execution order for units (shared pieces first, panel layout and plasmashell restart last).
 ORDER=(packages bin_stats blur osd volume_sound lockscreen lockwallpaper loginscreen themesettings glass cmdswap krunner shots
-       quicklook konsole helium mxkeys brightness audio windows battery netfeed sffont layout restart)
+       quicklook konsole helium mxkeys brightness audio windows battery fans netfeed sffont layout restart)
 
 # ------------------------------------------------------------------ units
 unit_packages() {   # Plasma packages are inert until used: widgets, global themes, wallpaper
@@ -251,6 +251,18 @@ unit_netfeed() {
     sudo install -m644 "$HERE/system/systemd/nethogs-feed.service" /etc/systemd/system/nethogs-feed.service
     sudo systemctl daemon-reload; sudo systemctl enable --now nethogs-feed.service
 }
+unit_fans() {
+    say "root: fan profiles (patched macsmc-hwmon for $(uname -r), mac-fand)"
+    if ! grep -qE 'apple,t600[012]' /proc/device-tree/compatible 2>/dev/null; then
+        echo "not an M1 Pro/Max/Ultra: the die keys are M1-specific, skipping"; return 0; fi
+    "$HERE/system/fan/build-module"
+    sudo install -m644 "$HERE/system/fan/macsmc-hwmon.conf" /etc/modprobe.d/macsmc-hwmon-parity.conf
+    sudo install -m755 "$HERE/system/bin/mac-fand" /usr/local/bin/mac-fand
+    sudo install -m644 "$HERE/system/systemd/mac-fand.service" /etc/systemd/system/mac-fand.service
+    sudo systemctl stop mac-fand.service 2>/dev/null || true
+    sudo modprobe -r macsmc_hwmon && sudo modprobe macsmc_hwmon
+    sudo systemctl daemon-reload; sudo systemctl enable --now mac-fand.service
+}
 unit_sffont() { say "root: SF font priority"; sudo install -m644 "$HERE/config/fontconfig/49-zz-macos-sf.conf" /etc/fonts/conf.d/49-zz-macos-sf.conf; }
 unit_layout() {
     say "menu bar widgets (Plasma scripting)"
@@ -283,7 +295,7 @@ resolve() {   # sets SELECTED and RUN (ordered units); fails on unknown ids befo
 plan() {
     resolve "$@"
     echo "features: ${SELECTED[*]}"; echo "units:    ${RUN[*]}"
-    local s=no; for u in "${RUN[@]}"; do case $u in battery|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
+    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
 }
 apply() {
     resolve "$@"

@@ -100,6 +100,30 @@ PlasmoidItem {
         }
     }
 
+    // one-off commands (fan profile)
+    P5Support.DataSource {
+        id: runner
+        engine: "executable"
+        connectedSources: []
+        onNewData: (source, data) => disconnectSource(source)
+    }
+    readonly property var fan: d && d.sensors.fan ? d.sensors.fan : null
+    readonly property var fanProfiles: [
+        { id: "macos", name: "macOS", hint: "Fans off until the chip reaches 60 °C, then ramp up gently" },
+        { id: "high", name: "High Power", hint: "Fans from 50 °C, full speed at 85 °C" },
+        { id: "max", name: "Max", hint: "Both fans at full speed" },
+        { id: "apple", name: "Apple SMC", hint: "The SMC firmware's own control (fans never stop on Linux)" }
+    ]
+    function setFanProfile(id) {
+        if (["macos", "high", "max", "apple"].indexOf(id) < 0) return;
+        runner.connectSource("printf %s " + id + " > /var/lib/mac-fan/profile");
+    }
+    function tempsOf(group) {
+        return d && d.sensors.temps ? d.sensors.temps.filter(t => t[2] === group) : [];
+    }
+    function avg(list) { return list.length ? list.reduce((a, t) => a + t[1], 0) / list.length : NaN; }
+    function hottest(list) { return list.reduce((m, t) => !m || t[1] > m[1] ? t : m, null); }
+
     Timer {
         interval: root.intervalMs
         running: true
@@ -706,14 +730,78 @@ PlasmoidItem {
                     }
                 }
                 Section { text: "FANS" }
+                RowLayout {
+                    visible: !!root.fan
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+                    Repeater {
+                        model: root.fanProfiles
+                        PlasmaComponents.Button {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            text: modelData.name
+                            checkable: true
+                            checked: root.fan && root.fan.profile === modelData.id
+                            onClicked: root.setFanProfile(modelData.id)
+                        }
+                    }
+                }
+                PlasmaComponents.Label {
+                    visible: !!root.fan
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    opacity: 0.6
+                    font.family: "SF Pro Text"
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                    text: {
+                        if (!root.fan) return "";
+                        const p = root.fanProfiles.find(x => x.id === root.fan.profile);
+                        const safety = root.fan.mode.indexOf("(") >= 0 ? "  ·  handed to the SMC " + root.fan.mode.slice(root.fan.mode.indexOf("(")) : "";
+                        return (p ? p.hint : "") + safety;
+                    }
+                }
                 Repeater {
                     model: root.d ? root.d.sensors.fans : []
-                    Row2 { k: modelData[0]; v: modelData[1].toFixed(0) + " rpm" }
+                    Row2 { k: modelData[0]; v: modelData[1] > 0 ? modelData[1].toFixed(0) + " rpm" : "Off" }
                 }
-                Section { text: "HOTTEST" }
+
+                Section { text: "TEMPERATURES" }
+                Row2 {
+                    readonly property var cpu: root.tempsOf("cpu")
+                    readonly property var hot: root.hottest(cpu)
+                    visible: cpu.length > 0
+                    k: "CPU  (average of " + cpu.length + " cores)"
+                    v: root.avg(cpu).toFixed(0) + "°" + (hot ? "   ·   hottest " + hot[1].toFixed(0) + "°" : "")
+                }
+                Row2 {
+                    readonly property var gpu: root.tempsOf("gpu")
+                    visible: gpu.length > 0
+                    k: "GPU  (average of " + gpu.length + " sensors)"
+                    v: root.avg(gpu).toFixed(0) + "°"
+                }
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    columnSpacing: Kirigami.Units.largeSpacing
+                    rowSpacing: 0
+                    Repeater {
+                        model: root.tempsOf("cpu").concat(root.tempsOf("gpu"))
+                        Row2 {
+                            k: modelData[0].replace("CPU performance core", "P-core").replace("CPU efficiency core", "E-core")
+                            v: modelData[1].toFixed(0) + "°"
+                            opacity: 0.8
+                        }
+                    }
+                }
                 Repeater {
-                    model: root.d ? root.d.sensors.hot : []
-                    Row2 { k: modelData[0]; v: modelData[1] + "°" }
+                    model: root.tempsOf("system")
+                    Row2 { k: modelData[0]; v: modelData[1].toFixed(0) + "°" }
+                }
+
+                Section { text: "POWER"; visible: !!(root.d && root.d.sensors.powers && root.d.sensors.powers.length) }
+                Repeater {
+                    model: root.d && root.d.sensors.powers ? root.d.sensors.powers : []
+                    Row2 { k: modelData[0]; v: modelData[1].toFixed(1) + " W" }
                 }
                 Section { text: "BATTERY"; visible: !!(root.d && root.d.sensors.battery) }
                 Row2 {

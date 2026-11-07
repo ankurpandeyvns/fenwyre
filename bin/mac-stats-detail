@@ -241,6 +241,27 @@ def gpu_raw():
     return kv or None
 
 
+def sensor_groups(temps):
+    """Temperatures by group for the Sensors tab: CPU cores (P then E), GPU, then the rest."""
+    def order(t):
+        n = t[1]
+        g = 0 if n.startswith("CPU performance") else 1 if n.startswith("CPU efficiency") else \
+            2 if n.startswith("GPU") else 3
+        return (g, n)
+    return [[l, round(v, 1), "cpu" if l.startswith("CPU") else "gpu" if l.startswith("GPU") else "system"]
+            for _, l, v in sorted(temps, key=order)]
+
+
+def fan_state():
+    """mac-fand status (profile, mode, die temperature), or None when it isn't installed."""
+    try:
+        with open("/run/mac-fan/state.json") as f:
+            st = json.load(f)
+        return st if time.time() - st.get("time", 0) < 30 else None
+    except (OSError, ValueError):
+        return None
+
+
 def sample():
     now = time.time()
     try:
@@ -362,7 +383,8 @@ def sample():
         "gpu": gpu,
         "sensors": {"cpuTemp": ms.cpu_temp(temps), "power": ms.system_power(powers, bat),
                     "fans": [[l, r] for _, l, r in fans], "hot": [[l, round(v)] for _, l, v in hot],
-                    "battery": bat},
+                    "temps": sensor_groups(temps), "powers": [[l, round(v, 1)] for _, l, v in powers],
+                    "fan": fan_state(), "battery": bat},
     }
     tmp = STATE + f".{os.getpid()}"
     with open(tmp, "w") as f:

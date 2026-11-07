@@ -1,0 +1,14 @@
+[Unit]
+Description=macOS-style fan profiles (kde-macos-parity)
+After=systemd-modules-load.service
+
+[Service]
+ExecStartPre=/bin/sh -c 'install -d -m 2775 -g wheel /var/lib/mac-fan; [ -e /var/lib/mac-fan/profile ] || { echo macos > /var/lib/mac-fan/profile; chgrp wheel /var/lib/mac-fan/profile; chmod 664 /var/lib/mac-fan/profile; }'
+ExecStart=/usr/local/bin/mac-fand
+Restart=always
+RestartSec=3
+# hand the fans back to the SMC even if the daemon is killed hard
+ExecStopPost=/bin/sh -c 'for f in /sys/class/hwmon/hwmon*/fan*_target; do [ -w "$f" ] && echo 0 > "$f"; done; true'
+
+[Install]
+WantedBy=multi-user.target

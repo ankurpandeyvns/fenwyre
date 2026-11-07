@@ -10,7 +10,7 @@ macsmc_hwmon temps/fans/power; elsewhere: coretemp/k10temp/acpi etc.).
   mac-stats --plain               # human-readable dump (debug: shows every sensor found)
 Env SYSFS=/path lets tests point it at a fake /sys tree; PROC likewise for /proc.
 """
-import glob, json, os, sys, time
+import glob, json, os, re, sys, time
 
 SYS = os.environ.get("SYSFS", "/sys")
 PROC = os.environ.get("PROC", "/proc")
@@ -61,15 +61,55 @@ def memory():
     return (100.0 * (tot - avail) / tot if tot else 0.0), (tot - avail) / 1048576, tot / 1048576, swap_used / 1048576
 
 
+# Names for Apple SMC sensors, as the Stats app (github.com/exelban/stats, Modules/Sensors/values.swift)
+# shows them on macOS. Die keys appear in hwmon as "SoC die <key>" (patched macsmc-hwmon).
+SMC_KEYS = {  # M1 Pro / Max
+    "Tp09": ("CPU efficiency core 1", "cpu"), "Tp0T": ("CPU efficiency core 2", "cpu"),
+    "Tp01": ("CPU performance core 1", "cpu"), "Tp05": ("CPU performance core 2", "cpu"),
+    "Tp0D": ("CPU performance core 3", "cpu"), "Tp0H": ("CPU performance core 4", "cpu"),
+    "Tp0L": ("CPU performance core 5", "cpu"), "Tp0P": ("CPU performance core 6", "cpu"),
+    "Tp0X": ("CPU performance core 7", "cpu"), "Tp0b": ("CPU performance core 8", "cpu"),
+    "Tg05": ("GPU 1", "gpu"), "Tg0D": ("GPU 2", "gpu"), "Tg0L": ("GPU 3", "gpu"), "Tg0T": ("GPU 4", "gpu"),
+}
+LABELS = {  # macsmc-hwmon device-tree labels -> Stats-style names
+    "NAND Flash Temperature": "NAND (SSD)", "Battery Hotspot": "Battery",
+    "Charge Regulator Temp": "Charger", "WiFi/BT Module Temp": "Wi-Fi / Bluetooth",
+    "Total System Power": "System total", "AC Input Power": "Power adapter",
+    "3.8 V Rail Power": "3.8 V rail", "Heatpipe Power": "Heatpipe (SoC)",
+    "Charger Input Voltage": "Power adapter", "Battery Voltage": "Battery", "AC Input Current": "Power adapter",
+}
+
+
+def sensor_name(label):
+    """(display name, group) for a hwmon label; group is cpu, gpu or system."""
+    if label.startswith("SoC die "):
+        key = label[8:].strip()
+        return SMC_KEYS.get(key, (f"SoC die {key}", "cpu"))
+    return LABELS.get(label, label), "system"
+
+
+# hwmon devices that only mirror another sensor (thermal-zone and battery-gauge copies)
+DUPLICATES = {"macsmc_soc_die", "macsmc_battery"}
+DEVICE_NAMES = {"nvme": "SSD controller", "tas2764": "Speaker amplifier"}
+
+
 def hwmon():
     temps, fans, powers = [], [], []
-    for h in sorted(glob.glob(f"{SYS}/class/hwmon/hwmon*")):
+    count = {}
+    for h in sorted(glob.glob(f"{SYS}/class/hwmon/hwmon*"), key=lambda p: int(re.sub(r"\D", "", p) or 0)):
         name = rd(f"{h}/name", os.path.basename(h))
-        for t in glob.glob(f"{h}/temp*_input"):
+        if name in DUPLICATES:
+            continue
+        for t in sorted(glob.glob(f"{h}/temp*_input")):
             v = num(t)
             if v is None or v <= 0 or v > 150000:
                 continue
-            label = rd(t.replace("_input", "_label"), os.path.basename(t)[:-6])
+            raw = rd(t.replace("_input", "_label"), "")
+            if name in DEVICE_NAMES and (not raw or raw == "Composite"):
+                count[name] = count.get(name, 0) + 1
+                label = DEVICE_NAMES[name] + (f" {count[name]}" if name == "tas2764" else "")
+            else:
+                label = sensor_name(raw or os.path.basename(t)[:-6])[0]
             temps.append((name, label, v / 1000))
         for fn in glob.glob(f"{h}/fan*_input"):
             v = num(fn)
@@ -78,13 +118,16 @@ def hwmon():
         for p in glob.glob(f"{h}/power*_input"):
             v = num(p)
             if v is not None:
-                powers.append((name, rd(p.replace("_input", "_label"), os.path.basename(p)[:-6]), v / 1e6))
+                powers.append((name, sensor_name(rd(p.replace("_input", "_label"), os.path.basename(p)[:-6]))[0], v / 1e6))
     return temps, fans, powers
 
 
 def cpu_temp(temps):
     if not temps:
         return None
+    cores = [t[2] for t in temps if t[1].startswith("CPU ")]
+    if cores:
+        return sum(cores) / len(cores)
     keys = ("cpu", "pacc", "eacc", "soc", "package", "tctl", "core", "die")
     pref = [t for t in temps if any(k in f"{t[0]} {t[1]}".lower() for k in keys)]
     return max(t[2] for t in (pref or temps))

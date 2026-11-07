@@ -1,0 +1,17 @@
+#!/bin/bash
+# Build the patched macsmc-hwmon for the running kernel and install it as an override in
+# /lib/modules/$(uname -r)/updates/ (the packaged module is left untouched; a new kernel version uses
+# its own stock module until this is run again).
+#   macsmc-hwmon.c = linux-aurora drivers/hwmon/macsmc-hwmon.c @ 8fd1bf481a + kde-macos-parity.patch:
+#   M1 Pro/Max/Ultra (t6000/1/2) get the SoC die zone and debugfs key list; fan_stop=1 lets a target
+#   below the fan minimum stop the fan.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+kver=${1:-$(uname -r)}
+build=$(mktemp -d)
+trap 'rm -rf "$build"' EXIT
+cp "$here/macsmc-hwmon.c" "$here/Makefile" "$build/"
+make -s -C "/usr/lib/modules/$kver/build" M="$build" modules
+sudo install -Dm644 "$build/macsmc-hwmon.ko" "/lib/modules/$kver/updates/macsmc-hwmon.ko"
+sudo depmod "$kver"
+echo "installed /lib/modules/$kver/updates/macsmc-hwmon.ko"

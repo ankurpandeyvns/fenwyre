@@ -1,0 +1,50 @@
+--- macsmc-hwmon.c.orig	2026-11-08 04:48:09.169809442 +0530
++++ macsmc-hwmon.c	2026-11-08 04:48:09.180611412 +0530
+@@ -57,6 +57,16 @@
+  * from the machine's entry in macsmc_hwmon_boards[]. Keys the SMC does not
+  * have are skipped.
+  */
++/*
++ * kde-macos-parity: with fan_stop=1 (and fan_control=1), writing a target
++ * between 1 and the fan's minimum stops the fan (manual mode, target 0), the
++ * way macOS idles these fans. 0 still hands the fan back to the SMC.
++ */
++static bool fan_stop;
++module_param_unsafe(fan_stop, bool, 0644);
++MODULE_PARM_DESC(fan_stop,
++		 "With fan_control, a target below the fan minimum (but not 0) stops the fan");
++
+ static char *soc_die_keys;
+ module_param(soc_die_keys, charp, 0444);
+ MODULE_PARM_DESC(soc_die_keys,
+@@ -123,7 +133,11 @@
+ 
+ static bool macsmc_hwmon_is_m3(void)
+ {
+-	return of_machine_is_compatible("apple,t6030") ||
++	/* kde-macos-parity: M1 Pro/Max/Ultra get the same die zone and key list. */
++	return of_machine_is_compatible("apple,t6000") ||
++	       of_machine_is_compatible("apple,t6001") ||
++	       of_machine_is_compatible("apple,t6002") ||
++	       of_machine_is_compatible("apple,t6030") ||
+ 	       of_machine_is_compatible("apple,t6031") ||
+ 	       of_machine_is_compatible("apple,t6032") ||
+ 	       of_machine_is_compatible("apple,t6034") ||
+@@ -514,6 +528,17 @@
+ 		}
+ 		return macsmc_hwmon_write_key(hwmon->smc,
+ 					      &hwmon->fan.fans[channel].set, val);
++	} else if (fan_stop && val > 0 && val < min) {
++		if (!hwmon->fan.fans[channel].manual) {
++			ret = macsmc_hwmon_write_key(hwmon->smc,
++						     &hwmon->fan.fans[channel].mode, 1);
++			if (ret < 0)
++				return ret;
++
++			hwmon->fan.fans[channel].manual = true;
++		}
++		return macsmc_hwmon_write_key(hwmon->smc,
++					      &hwmon->fan.fans[channel].set, 0);
+ 	} else if (!val) {
+ 		if (hwmon->fan.fans[channel].manual) {
+ 			ret = macsmc_hwmon_write_key(hwmon->smc,

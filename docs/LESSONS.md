@@ -147,3 +147,15 @@
   widgets' `Layout.minimumWidth` (spacer ~1, app menu = its menus) plus the stats at full width. `Screen.*` inside a
   panel widget reported eDP-1 on every screen, so don't size by screen.
 
+## Fans (M1 Max, Asahi)
+- Stock `macsmc-hwmon` (linux-aurora): `fan_control=1` makes `fanN_target` writable, but only `min..max` or 0
+  (= back to the SMC); the SMC idles the fans at their minimum (~1500 rpm), never 0 like macOS. SoC die sensors and
+  the debugfs key list (`/sys/kernel/debug/macsmc-hwmon/keys`) are gated to M3 machines.
+- The patch (`system/fan/`) adds t6000/1/2 to that gate and `fan_stop=1`: a target between 1 and the minimum writes
+  manual mode with target 0, and the SMC stops the fan (verified: 0 rpm, back to ~1550 rpm within ~3 s on 0).
+- M1 Pro/Max die keys (Stats `values.swift`): Tp01..Tp0b P-cores, Tp09/Tp0T E-cores, Tg05/0D/0L/0T GPU. Each comes in
+  a triplet (x0/x1/x2); x1 is what Stats shows, x2 runs ~5 C hotter.
+- The kernel is clang-built but has no CFI/LTO/randstruct/modversions, so a gcc-built module loads fine.
+- Apple doesn't publish fan curves; macOS keeps these fans at 0 rpm at idle. The "macOS" profile here (off below
+  60 C, min..max over 60..95 C) is an approximation, not Apple's table.
+

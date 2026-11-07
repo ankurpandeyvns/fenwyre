@@ -1,0 +1,183 @@
+#!/usr/bin/python3 -I
+"""mac-fand: macOS-style fan profiles for Apple silicon Macs on Asahi (kde-macos-parity).
+
+Needs the patched macsmc-hwmon (system/fan/): fan_control=1 makes fanN_target writable, fan_stop=1
+lets a target below the fan minimum stop the fan, and the SoC die keys give the macsmc_soc_die
+thermal zone (hottest of the CPU/GPU die sensors, the same ones Stats/iStat show on macOS).
+
+Profile (one word in /var/lib/mac-fan/profile, re-read every cycle):
+  macos   fans off until the die reaches 60 C, then from the minimum speed up to full at 95 C;
+          off again below 54 C (default)
+  high    like macOS "High Power": fans from 50 C, full at 85 C, never off once started until 45 C
+  max     both fans at full speed
+  apple   hand the fans to the SMC firmware (what Linux does without this daemon)
+
+Safety: any read error, a missing die zone, or a die at or above 95 C hands the fans back to the SMC
+(target 0) until the next good reading below 90 C; on exit the fans go back to the SMC too.
+Status for the menu bar widget: /run/mac-fan/state.json.
+"""
+import glob, json, os, signal, sys, time
+
+PROFILE_FILE = "/var/lib/mac-fan/profile"
+STATE_DIR = "/run/mac-fan"
+PERIOD = 2.0
+CURVES = {          # (start C, stop C, full C)
+    "macos": (60.0, 54.0, 95.0),
+    "high": (50.0, 45.0, 85.0),
+}
+EMERGENCY, EMERGENCY_CLEAR = 95.0, 90.0
+
+
+def read(path):
+    with open(path) as f:
+        return f.read().strip()
+
+
+def hwmon_dir():
+    for d in glob.glob("/sys/class/hwmon/hwmon*"):
+        try:
+            if read(f"{d}/name") == "macsmc_hwmon":
+                return d
+        except OSError:
+            pass
+    return None
+
+
+def die_temp():
+    for z in glob.glob("/sys/class/thermal/thermal_zone*"):
+        try:
+            if read(f"{z}/type") == "macsmc_soc_die":
+                return int(read(f"{z}/temp")) / 1000.0
+        except (OSError, ValueError):
+            pass
+    return None
+
+
+def param(name):
+    try:
+        return read(f"/sys/module/macsmc_hwmon/parameters/{name}") == "Y"
+    except OSError:
+        return False
+
+
+class Fans:
+    def __init__(self, hw):
+        self.hw = hw
+        self.ids = sorted(int(p.split("fan")[1].split("_")[0]) for p in glob.glob(f"{hw}/fan*_target"))
+        self.last = {}
+
+    def limits(self, i):
+        return int(read(f"{self.hw}/fan{i}_min")), int(read(f"{self.hw}/fan{i}_max"))
+
+    def rpm(self, i):
+        return int(read(f"{self.hw}/fan{i}_input"))
+
+    def set(self, i, value):
+        if self.last.get(i) == value:
+            return
+        with open(f"{self.hw}/fan{i}_target", "w") as f:
+            f.write(str(int(value)))
+        self.last[i] = value
+
+    def release(self):
+        for i in self.ids:
+            try:
+                with open(f"{self.hw}/fan{i}_target", "w") as f:
+                    f.write("0")
+            except OSError:
+                pass
+        self.last = {}
+
+
+def profile():
+    try:
+        p = read(PROFILE_FILE).lower()
+    except OSError:
+        p = "macos"
+    return p if p in ("macos", "high", "max", "apple") else "macos"
+
+
+def write_state(state):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = f"{STATE_DIR}/state.json.tmp"
+    with open(tmp, "w") as f:
+        json.dump(state, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, f"{STATE_DIR}/state.json")
+
+
+def main():
+    hw = hwmon_dir()
+    if not hw or not param("fan_control"):
+        print("macsmc_hwmon with fan_control=1 not loaded; leaving the fans to the SMC", file=sys.stderr)
+        return 1
+    fans = Fans(hw)
+    can_stop = param("fan_stop")
+    running = {"on": True}
+
+    def stop(*_):
+        running["on"] = False
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    spinning = False
+    emergency = False
+    current = {}
+    try:
+        while running["on"]:
+            p = profile()
+            t = die_temp()
+            mode = p
+            try:
+                if t is None or (t >= EMERGENCY) or (emergency and t >= EMERGENCY_CLEAR):
+                    emergency = t is None or t >= EMERGENCY_CLEAR
+                    fans.release(); mode = "apple (safety)" if p != "apple" else "apple"
+                    spinning = True
+                elif p == "apple":
+                    emergency = False
+                    fans.release(); spinning = True
+                else:
+                    emergency = False
+                    for i in fans.ids:
+                        lo, hi = fans.limits(i)
+                        if p == "max":
+                            want = hi
+                        else:
+                            start, stop_t, full = CURVES[p]
+                            if spinning and t < stop_t:
+                                spinning = False
+                            elif not spinning and t >= start:
+                                spinning = True
+                            if not spinning:
+                                want = 1 if can_stop else lo        # 1 = "below minimum" = stop
+                            else:
+                                frac = max(0.0, min(1.0, (t - start) / (full - start)))
+                                want = lo + (hi - lo) * frac * frac  # gentle at first, like macOS
+                        # ramp: up quickly, down by at most 300 rpm per cycle
+                        prev = current.get(i, want)
+                        if want > 1 and prev > 1 and want < prev:
+                            want = max(want, prev - 300)
+                        current[i] = want
+                        fans.set(i, round(want))
+            except OSError as e:
+                print(f"fan write failed ({e}); handing the fans to the SMC", file=sys.stderr)
+                fans.release(); mode = "apple (error)"
+            try:
+                write_state({"profile": p, "mode": mode, "die": t,
+                             "fans": [{"id": i, "rpm": fans.rpm(i), "target": fans.last.get(i, 0)} for i in fans.ids],
+                             "canStop": can_stop, "time": time.time()})
+            except OSError:
+                pass
+            time.sleep(PERIOD)
+    finally:
+        fans.release()
+        try:
+            write_state({"profile": profile(), "mode": "apple (daemon stopped)", "die": die_temp(), "fans": [],
+                         "canStop": can_stop, "time": time.time()})
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
