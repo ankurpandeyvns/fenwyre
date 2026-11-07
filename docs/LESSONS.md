@@ -64,3 +64,9 @@
 ## Process
 - Screenshot every visual change; "looks right in code" was wrong several times.
 - Keep a progress log with backups listed, so any change can be reverted.
+
+## GPU stats (Asahi AGX)
+- The asahi DRM driver exposes `/sys/class/drm/cardN/device/agx_stats` (`busy_ns`, `jobs`, `pstate`, `power_mw`,
+  `util1..4`) and `gpu_memory` (`user_resident`, `kernel_resident`). Utilization = Δbusy_ns / Δwall time.
+  `pstate` indexes `/sys/firmware/devicetree/base/opp-table-gpu/opp*/opp-hz` (big-endian u64; M1 Max tops out at
+  1296 MHz). There is no per-process GPU fdinfo, and `temperature_raw` has no documented scale, so neither is shown.

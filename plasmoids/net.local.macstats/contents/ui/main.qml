@@ -24,12 +24,15 @@ PlasmoidItem {
     readonly property color cShm: "#64d2ff"
     readonly property color cUp: "#ff453a"
     readonly property color cDown: "#0a84ff"
+    readonly property color cGpu: "#ffd60a"
 
     property var d: null
     property real cpu: d ? d.cpu.total : 0
     property real mem: d ? d.mem.percent : 0
     property string temp: d && d.sensors.cpuTemp !== null ? d.sensors.cpuTemp.toFixed(0) : "–"
     property string power: d && d.sensors.power !== null ? d.sensors.power.toFixed(1) : "–"
+    readonly property var g: d ? d.gpu : null
+    property real gpu: g ? g.util : 0
     property real rxRate: d ? d.net.rx : 0
     property real txRate: d ? d.net.tx : 0
 
@@ -40,12 +43,14 @@ PlasmoidItem {
     property var hTx: []
     property var hTemp: []
     property var hPower: []
+    property var hGpu: []
+    property var hGpuPower: []
 
     property int page: 0
 
     preferredRepresentation: compactRepresentation
     toolTipMainText: "System"
-    toolTipSubText: "CPU " + cpu.toFixed(0) + "%   Memory " + mem.toFixed(0) + "%   ↓ " + fmtRate(rxRate) + "  ↑ " + fmtRate(txRate)
+    toolTipSubText: "CPU " + cpu.toFixed(0) + "%   GPU " + gpu.toFixed(0) + "%   Memory " + mem.toFixed(0) + "%   ↓ " + fmtRate(rxRate) + "  ↑ " + fmtRate(txRate)
 
     function push(arr, v) {
         const a = arr.slice();
@@ -88,6 +93,7 @@ PlasmoidItem {
                 root.hRx = root.push(root.hRx, j.net.rx);
                 root.hTx = root.push(root.hTx, j.net.tx);
                 if (j.sensors.cpuTemp !== null) root.hTemp = root.push(root.hTemp, j.sensors.cpuTemp);
+                if (j.gpu) { root.hGpu = root.push(root.hGpu, j.gpu.util); root.hGpuPower = root.push(root.hGpuPower, j.gpu.power); }
                 if (j.sensors.power !== null) root.hPower = root.push(root.hPower, j.sensors.power);
             } catch (e) {}
             disconnectSource(source);
@@ -364,14 +370,30 @@ PlasmoidItem {
                     Layout.preferredHeight: compact.height * 0.6
                 }
             }
-            ColumnLayout {
+            RowLayout {
                 property int page: 2
+                visible: !!root.g
+                spacing: Math.round(Kirigami.Units.smallSpacing * 1.5)
+                ColumnLayout {
+                    spacing: 0
+                    Tiny { text: "GPU"; opacity: 0.6 }
+                    Tiny { text: root.gpu.toFixed(0) + "%" }
+                }
+                Spark {
+                    values: root.tail(root.hGpu, root.sparkLength)
+                    lineColor: root.cGpu
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 1.1
+                    Layout.preferredHeight: compact.height * 0.6
+                }
+            }
+            ColumnLayout {
+                property int page: 3
                 spacing: 0
                 Tiny { text: "↑" + root.shortRate(root.txRate); Layout.minimumWidth: Kirigami.Units.gridUnit * 1.6 }
                 Tiny { text: "↓" + root.shortRate(root.rxRate); Layout.minimumWidth: Kirigami.Units.gridUnit * 1.6 }
             }
             ColumnLayout {
-                property int page: 3
+                property int page: 4
                 spacing: 0
                 Tiny { text: root.temp + "°" }
                 Tiny { text: root.power + "W" }
@@ -393,8 +415,9 @@ PlasmoidItem {
             currentIndex: root.page
             PlasmaComponents.TabButton { text: "CPU"; onClicked: root.page = 0 }
             PlasmaComponents.TabButton { text: "Memory"; onClicked: root.page = 1 }
-            PlasmaComponents.TabButton { text: "Network"; onClicked: root.page = 2 }
-            PlasmaComponents.TabButton { text: "Sensors"; onClicked: root.page = 3 }
+            PlasmaComponents.TabButton { text: "GPU"; onClicked: root.page = 2 }
+            PlasmaComponents.TabButton { text: "Network"; onClicked: root.page = 3 }
+            PlasmaComponents.TabButton { text: "Sensors"; onClicked: root.page = 4 }
         }
 
         ColumnLayout {
@@ -504,9 +527,59 @@ PlasmoidItem {
                 }
             }
 
-            // Network
+            // GPU
             ColumnLayout {
                 visible: root.page === 2
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+                RowLayout {
+                    ColumnLayout {
+                        spacing: 0
+                        PlasmaComponents.Label { text: "Utilization"; opacity: 0.7; font.family: "SF Pro Text" }
+                        Big { text: root.gpu.toFixed(0) + "%" }
+                    }
+                    Item { Layout.fillWidth: true }
+                    ColumnLayout {
+                        spacing: 0
+                        PlasmaComponents.Label { text: "GPU power"; opacity: 0.7; font.family: "SF Pro Text"; Layout.alignment: Qt.AlignRight }
+                        Big { text: (root.g ? root.g.power.toFixed(1) : "–") + " W"; Layout.alignment: Qt.AlignRight }
+                    }
+                }
+                Frame {
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 4
+                    AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hGpu]; colors: [root.cGpu] }
+                }
+                Frame {
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                    AreaGraph {
+                        anchors.fill: parent; anchors.margins: 1
+                        series: [root.hGpuPower]; colors: [root.cComp]
+                        maxValue: Math.max(10, Math.max.apply(null, root.hGpuPower.concat([0])) * 1.15)
+                    }
+                }
+                Row2 { k: "Frequency"; v: root.g && root.g.mhz !== null ? root.g.mhz + " MHz" + (root.g.maxMhz ? "  of " + root.g.maxMhz : "") : "–" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    PlasmaComponents.Label { text: "Clock"; Layout.fillWidth: true; font.family: "SF Pro Text" }
+                    Rectangle {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 6; height: 6; radius: 3
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+                        Rectangle {
+                            readonly property real f: root.g && root.g.mhz && root.g.maxMhz ? root.g.mhz / root.g.maxMhz : 0
+                            width: Math.max(height, parent.width * f); height: parent.height; radius: 3
+                            color: root.cGpu
+                        }
+                    }
+                }
+                Row2 { k: "Memory in use"; v: root.g ? root.fmtBytes(root.g.mem) : "–"; dot: root.cShm }
+                Row2 { k: "Apps"; v: root.g ? root.fmtBytes(root.g.memUser) : "–" }
+                Row2 { k: "Driver"; v: root.g ? root.fmtBytes(root.g.memKernel) : "–" }
+                Row2 { k: "Jobs per second"; v: root.g ? root.g.jobs.toLocaleString(Qt.locale(), "f", 0) : "–" }
+            }
+
+            // Network
+            ColumnLayout {
+                visible: root.page === 3
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 RowLayout {
@@ -554,7 +627,7 @@ PlasmoidItem {
 
             // Sensors
             ColumnLayout {
-                visible: root.page === 3
+                visible: root.page === 4
                 Layout.fillWidth: true
                 spacing: Kirigami.Units.smallSpacing
                 RowLayout {

@@ -205,6 +205,42 @@ def zram():
     return orig, comp
 
 
+
+def gpu_dev():
+    """The Apple AGX render device (asahi driver exposes agx_stats / gpu_memory)."""
+    for c in sorted(os.listdir("/sys/class/drm")):
+        d = f"/sys/class/drm/{c}/device"
+        if re.fullmatch(r"card\d+", c) and os.path.exists(f"{d}/agx_stats"):
+            return d
+    return None
+
+
+def gpu_freqs():
+    for t in ("/sys/firmware/devicetree/base/opp-table-gpu",):
+        try:
+            return [struct.unpack(">Q", open(f"{t}/{n}/opp-hz", "rb").read()[:8])[0] // 1_000_000
+                    for n in sorted(os.listdir(t), key=lambda n: int(re.sub(r"\D", "", n) or 0))
+                    if os.path.exists(f"{t}/{n}/opp-hz")]
+        except (OSError, struct.error):
+            pass
+    return []
+
+
+def gpu_raw():
+    d = gpu_dev()
+    if not d:
+        return None
+    kv = {}
+    for f in ("agx_stats", "gpu_memory"):
+        for line in rd(f"{d}/{f}").splitlines():
+            k, _, v = line.partition(" ")
+            try:
+                kv[k] = int(v)
+            except ValueError:
+                pass
+    return kv or None
+
+
 def sample():
     now = time.time()
     try:
@@ -290,6 +326,23 @@ def sample():
         rxr, txr = max(0, (rx - pn["rx"]) / dt), max(0, (tx - pn["tx"]) / dt)
     iface, gw = default_iface()
 
+    # GPU: busy time delta (ns) over wall time, falling back to the firmware's util figure.
+    g = gpu_raw()
+    gpu = None
+    pg = prev.get("gpu") or {}
+    if g:
+        util = float(g.get("util1", 0))
+        if dt and "busy_ns" in pg and g.get("busy_ns", 0) >= pg["busy_ns"]:
+            util = min(100.0, 100 * (g["busy_ns"] - pg["busy_ns"]) / (dt * 1e9))
+        jobs = max(0, (g.get("jobs", 0) - pg["jobs"]) / dt) if dt and "jobs" in pg else 0
+        fr = gpu_freqs()
+        ps = g.get("pstate", 0)
+        gpu = {"util": round(util, 1), "power": round(g.get("power_mw", 0) / 1000, 2),
+               "pstate": ps, "mhz": fr[ps] if 0 <= ps < len(fr) else None,
+               "maxMhz": max(fr) if fr else None, "jobs": round(jobs),
+               "mem": g.get("user_resident", 0) + g.get("kernel_resident", 0),
+               "memUser": g.get("user_resident", 0), "memKernel": g.get("kernel_resident", 0)}
+
     temps, fans, powers = ms.hwmon()
     bat = ms.battery()
     hot = sorted(temps, key=lambda x: -x[2])[:5]
@@ -306,6 +359,7 @@ def sample():
         "net": {"rx": rxr, "tx": txr, "rxTotal": rx, "txTotal": tx, "iface": iface,
                 "ip": ipv4(iface) if iface else "", "gateway": gw,
                 "tailscale": ipv4("tailscale0"), "top": top_net, "perApp": bool(nh)},
+        "gpu": gpu,
         "sensors": {"cpuTemp": ms.cpu_temp(temps), "power": ms.system_power(powers, bat),
                     "fans": [[l, r] for _, l, r in fans], "hot": [[l, round(v)] for _, l, v in hot],
                     "battery": bat},
@@ -313,7 +367,8 @@ def sample():
     tmp = STATE + f".{os.getpid()}"
     with open(tmp, "w") as f:
         json.dump({"t": now, "cpu": ct, "procs": {k: [v[0], v[1]] for k, v in pr.items()},
-                   "net": {"rx": rx, "tx": tx}, "out": out}, f)
+                   "net": {"rx": rx, "tx": tx},
+                   "gpu": {k: g[k] for k in ("busy_ns", "jobs") if k in g} if g else {}, "out": out}, f)
     os.replace(tmp, STATE)
     return out
 

@@ -23,7 +23,7 @@ touches to `~/kde-pre-mac-backup/`.
 | Cmd shortcuts | Cmd/Ctrl swapped in XKB, so Cmd+C/V/W/Q/Space work | `kxkbrc` |
 | Spotlight (Cmd+Space) | Centred translucent search: apps, settings, calculator, unit and currency conversion | `plasmoids/net.local.spotlight` + `qml-blurbehind` |
 | Control Center | Wi-Fi, Bluetooth, VPN, Focus/DND, per-screen brightness, volume + output, Now Playing, keyboard backlight, battery mode | `plasmoids/net.local.controlcenter` |
-| Stats / iStat Menus | Menu-bar CPU/MEM sparklines, network Mbps, temp, watts; click for graphs, per-app CPU/memory/network | `plasmoids/net.local.macstats`, `bin/mac-stats*`, `system/bin/nethogs-feed` |
+| Stats / iStat Menus | Menu-bar CPU/MEM/GPU sparklines, network Mbps, temp, watts; click for graphs, per-app CPU/memory/network, GPU load/clock/power/memory (Asahi `agx_stats`) | `plasmoids/net.local.macstats`, `bin/mac-stats*`, `system/bin/nethogs-feed` |
 | Quick Look (Space) | Space previews in Dolphin and on the desktop, arrow keys move between files, big window | GNOME Sushi + `bin/quicklook`, `bin/sushi-launch`, `bin/desktop-quicklook-patch` |
 | Volume / brightness HUD (27.2) | Clear Liquid Glass capsule under the menu bar, top right, outlined glyph, thin 16-segment bar | `osd/` (+ `qml-blurbehind`) |
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
