@@ -44,6 +44,22 @@ step_plasmoids() {
     done
 }
 
+step_lockscreen() {
+    say "macOS lock screen (glass clock), lock/unlock watcher for the wallpaper handoff"
+    local b; b=$(mktemp -d)
+    cmake -S "$HERE/qml-lockwatch" -B "$b" -DCMAKE_BUILD_TYPE=Release >/dev/null
+    cmake --build "$b" -j"$(nproc)" >/dev/null
+    local q=$HOME/.local/lib/qt6/qml/net/local/lockwatch; mkdir -p "$q"
+    cp "$b"/net/local/lockwatch/{liblockwatch.so,qmldir,lockwatch.qmltypes} "$q/"
+    rm -rf "$b"
+    local d=$HOME/.local/share/plasma/shells/net.local.macos.lockscreen
+    mkdir -p "$d" && cp -r "$HERE/lockscreen/net.local.macos.lockscreen/." "$d/"
+    # KWin spawns the greeter; PLASMA_DEFAULT_SHELL on KWin only picks the lock screen QML. Next login.
+    put "$HERE/systemd/user/plasma-kwin_wayland.service.d/macos-lockscreen.conf" \
+        "$HOME/.config/systemd/user/plasma-kwin_wayland.service.d/macos-lockscreen.conf"
+    systemctl --user daemon-reload
+}
+
 step_blur() {
     say "net.local.blur QML plugin (KWin blur behind for Spotlight)"
     local b; b=$(mktemp -d)
@@ -166,7 +182,7 @@ step_system() {
     sudo systemctl enable --now battery-limit.service nethogs-feed.service
 }
 
-ALL=(bin plasmoids blur osd files services settings shortcuts layout restart)
+ALL=(bin plasmoids blur lockscreen osd files services settings shortcuts layout restart)
 case "${1:-all}" in
     list) echo "user steps: ${ALL[*]}   extra: deps system" ;;
     all) for s in "${ALL[@]}"; do "step_$s"; done ;;

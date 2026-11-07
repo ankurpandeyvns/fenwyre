@@ -34,13 +34,50 @@ nineteen:
 		let ramp = "Right"
 		camera to -22.5, 45
 		scroll to 140, 110
+		add cover at 193, 107 size 110, 16 id "l1"				// [ext] the text is typed in, line by line
+		add cover at 150, 123 size 195, 15 id "l2"
+		add cover at 214, 139 size 63, 15 id "l3"
+		add cover at 169, 155 size 158, 15 id "l4"
+		add cover at 181, 171 size 139, 15 id "l5"
+		add caret at 194, 105 size 1, 12 id "c"
 	end simultaneous
 
 	scroll to 370, 140 over 24 seconds async "scroll"
 	scale in over 3 seconds
 
+	start simultaneous
+		reveal "l1" over 2.4 seconds
+		move "c" to 301, 105 over 2.4 seconds
+	end simultaneous
+	wait for 2.65 seconds
+	move "c" to 151, 121
+	start simultaneous
+		reveal "l2" over 4.2 seconds
+		move "c" to 344, 121 over 4.2 seconds
+	end simultaneous
+	wait for 4.45 seconds
+	move "c" to 215, 137
+	start simultaneous
+		reveal "l3" over 1.6 seconds
+		move "c" to 276, 137 over 1.6 seconds
+	end simultaneous
+	wait for 1.85 seconds
+	move "c" to 170, 153
+	start simultaneous
+		reveal "l4" over 3.4 seconds
+		move "c" to 326, 153 over 3.4 seconds
+	end simultaneous
+	wait for 3.65 seconds
+	move "c" to 182, 169
+	start simultaneous
+		reveal "l5" over 3 seconds
+		move "c" to 319, 169 over 3 seconds
+	end simultaneous
+	wait for 3.25 seconds
+
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds
+	remove controls											// [ext] drop the covers before the next image
 
 	return
 
@@ -56,7 +93,7 @@ style:
 		camera to 22.5, 45
 		mouse to 360, 120
 		scroll to 300, 50
-		reset controls
+		add menu at 267, 18 size 52, 18 name "MacWriteStyleMenu"	// [ext] re-added after "remove"
 	end simultaneous
 
 	scroll to 320, 200 over 18 seconds async "scroll"
@@ -112,10 +149,40 @@ empty:
 		camera to 22.5, 45
 		scroll to 30, 60
 		add caret at 9, 107 size 1, 12
+		let cursor = "Arrow"
+		mouse to 60, 110
+		add button at 10, 85 size 19, 16							// [ext] ruler: tab wells, line spacing
+		add button at 37, 85 size 19, 16
+		add button at 128, 85 size 33, 17
+		add button at 168, 85 size 33, 17
+		add button at 208, 85 size 33, 17
 	end simultaneous
 
 	scroll to 250, 60 over 16 seconds async "scroll"
 	scale in over 3 seconds
+
+	mouse to 46, 78 over 0.8 seconds curve easeout
+	wait for 0.2 seconds
+	mouse click
+	wait for 0.8 seconds
+	mouse to 144, 78 over 1.6 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.3 seconds
+	mouse up
+	wait for 0.9 seconds
+	mouse to 184, 78 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.3 seconds
+	mouse up
+	wait for 0.9 seconds
+	mouse to 224, 78 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.3 seconds
+	mouse up
+	mouse to 200, 120 over 1.5 seconds curve easeinout async "drift"
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds

@@ -1,0 +1,147 @@
+//
+//  Icon Garden - companion actions
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Runs alongside Apple's unmodified IconGarden.program: when Apple's program enters
+//  a scene, the label of the same name below starts. Camera, image and background
+//  commands are ignored here; this only adds a mouse that wanders through the garden,
+//  selecting icons the way the Finder does (inverted), with an occasional busy watch.
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+hero:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 132, 182
+		add radiobuttongroup
+		add selectable at 150, 213 size 19, 22 value 0		// strawberry
+		add selectable at 177, 208 size 33, 18 value 0		// pointing hand
+		add selectable at 219, 160 size 18, 11 value 0		// rabbit
+		add selectable at 320, 175 size 16, 13 value 0		// check mark
+	end simultaneous
+
+	wait for 2.5 seconds
+	mouse to 160, 203 over 1.2 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1.6 seconds
+	mouse to 193, 200 over 1 second curve easeinout
+	wait for 0.3 seconds
+	mouse click
+	wait for 0.2 seconds
+	mouse click
+	let cursor = "Watch"
+	wait for 1.6 seconds
+	let cursor = "Arrow"
+
+	mouse to 228, 156 over 1.6 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 2 seconds
+	mouse to 280, 185 over 2.5 seconds curve easeinout
+	wait for 1 second
+	mouse to 328, 169 over 1.5 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1 second
+	mouse to 372, 190 over 2 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+upper:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 405, 140
+		add radiobuttongroup
+		add selectable at 296, 123 size 33, 27 value 0		// "A" suitcase
+		add selectable at 242, 108 size 18, 12 value 0		// pattern swatch
+		add selectable at 218, 96 size 19, 14 value 0		// eraser
+		add selectable at 173, 90 size 21, 12 value 0		// envelope
+	end simultaneous
+
+	wait for 3 seconds
+	mouse to 340, 125 over 2 seconds curve easeinout
+	wait for 1.5 seconds
+	mouse to 312, 112 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 2 seconds
+	mouse to 251, 103 over 2.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 2 seconds
+	mouse to 227, 90 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse click
+	wait for 0.2 seconds
+	mouse click
+	let cursor = "Watch"
+	wait for 1.5 seconds
+	let cursor = "Arrow"
+
+	mouse to 183, 85 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1 second
+	mouse to 150, 110 over 2 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+lower:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 410, 236
+		add radiobuttongroup
+		add selectable at 336, 236 size 22, 25 value 0		// tree
+		add selectable at 282, 228 size 20, 17 value 0		// dashed selection
+		add selectable at 249, 201 size 11, 10 value 0		// command key
+		add selectable at 229, 238 size 36, 17 value 0		// dinosaur
+	end simultaneous
+
+	wait for 3 seconds
+	mouse to 347, 224 over 1.5 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 2.5 seconds
+	mouse to 291, 220 over 2 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 2 seconds
+	mouse to 254, 196 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1.5 seconds
+	mouse to 246, 230 over 1.2 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+	wait for 0.2 seconds
+	mouse click
+	let cursor = "Watch"
+	wait for 1.8 seconds
+	let cursor = "Arrow"
+
+	mouse to 190, 215 over 2.5 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

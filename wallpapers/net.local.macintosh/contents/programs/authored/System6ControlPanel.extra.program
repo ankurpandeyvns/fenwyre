@@ -1,0 +1,119 @@
+//
+//  System 6 Control Panel - companion actions
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Runs alongside Apple's unmodified System6ControlPanel.program and adds mouse
+//  activity to the scenes where Apple's program shows no cursor (categories, time,
+//  date). Its controls sit on top of Apple's and are dropped when the scene ends.
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+categories:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 175, 75
+		add radiobuttongroup
+		add selectable at 116, 104 size 35, 12 value 1 id "general"	// inverts the art's selected "General" label back
+		add radiobuttongroup
+		add selectable at 111, 165 size 45, 12 value 0				// Keyboard
+		add selectable at 122, 225 size 23, 12 value 0				// Map
+	end simultaneous
+	hide "general"
+
+	wait for 3 seconds
+	mouse to 150, 98 over 1.5 seconds curve easeout
+	wait for 2.5 seconds
+	mouse to 140, 140 over 1.5 seconds curve easeinout
+	wait for 1.5 seconds
+	mouse to 133, 160 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse click
+	show "general"
+
+	wait for 3 seconds
+	mouse to 133, 219 over 2 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1.5 seconds
+	mouse to 175, 250 over 2 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+time:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 248, 190
+		add radiobuttongroup
+		add radiobutton at 266, 207 value 1 action "time12Hour"
+		add radiobutton at 311, 207 value 0 action "time24Hour"
+		add cover at 264, 178 size 92, 14 id "cover"
+		add time at 267, 165 name "Geneva12" id "time"
+	end simultaneous
+	hide "cover"
+	hide "time"
+
+	wait for 3.5 seconds
+	mouse to 317, 201 over 1.5 seconds curve easeout
+	wait for 0.4 seconds
+	mouse click
+	show "cover"
+	show "time"
+
+	wait for 3 seconds
+	mouse to 274, 201 over 1.2 seconds curve easeinout
+	wait for 0.4 seconds
+	mouse click
+	hide "cover"
+	hide "time"
+
+	wait for 1 second
+	mouse to 345, 180 over 2 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+date:
+
+	start simultaneous
+		let cursor = "Arrow"
+		mouse to 372, 262
+		add radiobuttongroup
+		add radiobutton at 310, 282 value 0							// RAM cache On
+		add radiobutton at 310, 300 value 1							// RAM cache Off
+		add button at 291, 281 size 11, 9							// cache size up
+		add button at 291, 291 size 11, 9							// cache size down
+	end simultaneous
+
+	wait for 3.5 seconds
+	mouse to 318, 276 over 1.5 seconds curve easeout
+	wait for 0.4 seconds
+	mouse click
+
+	wait for 1.2 seconds
+	mouse to 296, 277 over 1 second curve easeout
+	wait for 0.3 seconds
+	mouse click
+	wait for 0.4 seconds
+	mouse click
+
+	wait for 0.8 seconds
+	mouse to 318, 294 over 1 second curve easeinout
+	wait for 0.4 seconds
+	mouse click
+
+	wait for 1 second
+	mouse to 262, 262 over 2 seconds curve easeinout
+
+	exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

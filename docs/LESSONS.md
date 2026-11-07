@@ -97,3 +97,12 @@
   front of that sink only, the sink stays the default (hardware volume intact), and it disappears when the
   headset does. Give it headroom (preamp `linear` Mult < 1) before boosting, or the encoder clips.
   Its `effect_input.*` sink still shows in `SinkModel`: filter it out of output pickers.
+
+## Lock screen
+- The greeter (`kscreenlocker_greet`, spawned by KWin) loads `contents/lockscreen/` from the Plasma/Shell package
+  named by `PLASMA_DEFAULT_SHELL`. Setting it only on `plasma-kwin_wayland.service` (systemd drop-in) changes the
+  lock screen without switching plasmashell's desktop shell. Takes effect at the next login.
+- `kscreenlocker_greet --testing` takes real keyboard input from the session: anything typed while it runs goes
+  into its password field. Don't run it while the user is typing.
+- The wallpaper hands off between greeter and desktop through `$XDG_RUNTIME_DIR` state plus a lock watcher
+  (`org.freedesktop.ScreenSaver` ActiveChanged) in `qml-lockwatch/`.

@@ -13,7 +13,20 @@ start simultaneous
 	let image = "MacPaint"
 	let cursor = "None"
 	let ramp = "None"
+	add canvas at 84, 289 size 412, 238							// [ext] pencil drawing area
+	add radiobuttongroup
+	add selectable at 42, 115 size 25, 22 value 1 id "pencil"		// [ext] the art's selected Pencil, inverted back when another tool is picked
+	add radiobuttongroup
+	add selectable at 17, 92 size 25, 21 value 0					// [ext] paint bucket
+	add selectable at 17, 115 size 25, 22 value 0					// [ext] brush
+	add selectable at 17, 159 size 25, 21 value 0					// [ext] rectangle
+	add selectable at 17, 204 size 25, 21 value 0					// [ext] oval
+	add button at 420, 318 size 19, 18							// [ext] pattern cells (flash while pressed)
+	add button at 340, 337 size 19, 18
+	add button at 280, 318 size 19, 18
+	add button at 200, 337 size 19, 18
 end simultaneous
+	hide "pencil"
 
 gosub drawing
 gosub tools
@@ -38,11 +51,23 @@ drawing:
 	scale in over 3 seconds
 
 	wait for 2 seconds
-	mouse to 175, 270 over 2 seconds curve easeout
+	mouse to 144, 265 over 1 second curve easeout
+	wait for 0.4 seconds
+	mouse down													// [ext] finish the disk slot
+	mouse to 223, 265 over 3 seconds
+	mouse up
 	wait for 1 second
-	mouse to 230, 268 over 3 seconds curve easeout
-	wait for 1 second
-	mouse to 300, 240 over 4 seconds curve easeout
+	mouse to 262, 248 over 2 seconds curve easeinout
+	wait for 0.4 seconds
+	mouse down													// [ext] a little squiggle signature
+	mouse to 270, 240 over 0.5 seconds
+	mouse to 278, 252 over 0.5 seconds
+	mouse to 286, 240 over 0.5 seconds
+	mouse to 294, 252 over 0.5 seconds
+	mouse to 302, 244 over 0.5 seconds
+	mouse up
+	wait for 0.8 seconds
+	mouse to 330, 230 over 2 seconds curve easeout
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds
@@ -55,14 +80,34 @@ tools:
 
 	start simultaneous
 		let scene = "tools"
-		let cursor = "None"
+		let cursor = "Arrow"
 		let ramp = "Down"
 		camera to 22.5, 45
+		mouse to 80, 60
 		scroll to 40, 40
 	end simultaneous
 
 	scroll to 40, 260 over 20 seconds async "scroll"
 	scale in over 3 seconds
+
+	mouse to 29, 82 over 1 second curve easeout					// [ext] pick a few tools
+	wait for 0.3 seconds
+	mouse click
+	show "pencil"
+	wait for 1.2 seconds
+	mouse to 29, 104 over 0.8 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+	wait for 2.2 seconds
+	mouse to 29, 148 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+	wait for 2.5 seconds
+	mouse to 29, 193 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse click
+	wait for 1 second
+	mouse to 60, 235 over 2 seconds curve easeinout
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds
@@ -75,14 +120,41 @@ patterns:
 
 	start simultaneous
 		let scene = "patterns"
-		let cursor = "None"
+		let cursor = "Arrow"
 		let ramp = "Left"
 		camera to -22.5, 45
+		mouse to 470, 300
 		scroll to 480, 318
 	end simultaneous
 
 	scroll to 110, 318 over 26 seconds async "scroll"
 	scale in over 3 seconds
+
+	mouse to 429, 309 over 1 second curve easeout					// [ext] try some patterns
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.35 seconds
+	mouse up
+	wait for 3.2 seconds
+	mouse to 349, 328 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.35 seconds
+	mouse up
+	wait for 2.8 seconds
+	mouse to 289, 309 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.35 seconds
+	mouse up
+	wait for 3 seconds
+	mouse to 209, 328 over 1.5 seconds curve easeinout
+	wait for 0.3 seconds
+	mouse down
+	wait for 0.35 seconds
+	mouse up
+	wait for 1 second
+	mouse to 100, 318 over 2.5 seconds curve easeinout
 
 	wait until 3 seconds before "scroll" completes
 	scale out over 3 seconds

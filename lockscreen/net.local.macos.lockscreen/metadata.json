@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/Shell",
+    "KPlugin": {
+        "Id": "net.local.macos.lockscreen",
+        "Name": "macOS Lock Screen",
+        "Description": "macOS 26-style lock screen (Liquid Glass clock, avatar and password pill); lock screen only, not a desktop shell",
+        "Authors": [
+            {
+                "Name": "local"
+            }
+        ],
+        "License": "GPL-2.0-or-later",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2",
+    "X-KDE-ParentApp": "org.kde.plasmashell"
+}
