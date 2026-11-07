@@ -53,7 +53,9 @@ how to verify it, and what not to do.
 
 4. **Panels**: build a top panel (launcher, app menu, spacer, system tray, clock) and an auto-hiding bottom
    dock (icon task manager, trash) on each screen, translucent. Then `./install.sh layout`.
-   `addWidget` appends; to put Mac Stats, Control Center and Spotlight just left of the clock, stop plasmashell,
+   Set `panelOpacity=1` for each top panel in `~/.config/plasmashellrc` (`[PlasmaViews][Panel N]`) while
+   plasmashell is stopped, so the bar uses the clear solid background.
+   `addWidget` appends; to put Mac Stats, battery, volume, Control Center and Spotlight just left of the clock, stop plasmashell,
    edit `AppletOrder=` for the panel in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`, start it again.
    Verify with a screenshot of each bar: Apple logo top-left, tray icons only inside the chevron, Spotlight
    magnifier visible.

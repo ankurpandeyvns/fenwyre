@@ -18,13 +18,14 @@ touches to `~/kde-pre-mac-backup/`.
 | Menu bar + Dock | Top panel (Apple logo launcher, global menu, tray, clock) and auto-hiding dock on every screen | Plasma panels |
 | Look | WhiteSur Plasma style, icons, cursors, window decoration, SF Pro / SF Mono fonts | WhiteSur (upstream), AUR `apple-fonts`, `config/fontconfig` |
 | Light / Dark switch | "macOS Light" / "macOS Dark" global themes that keep the macOS look | `look-and-feel/` |
-| Same glass everywhere | Menu bar, dock, popups and Spotlight share one tint over KWin blur, re-synced at every login | `bin/plasma-sync-glass` |
+| Clear menu bar, glass popups | Menu bar with no background (macOS 26/27); dock, popups and Spotlight share one glass tint; re-applied at every login | `bin/plasma-sync-glass` |
+| Menu bar right side | Battery, volume, Control Center, "Nov 8  3:04 AM" clock; no tray chevron, no Spotlight icon | `plasma-scripts/mac-layout.js` |
 | Cmd shortcuts | Cmd/Ctrl swapped in XKB, so Cmd+C/V/W/Q/Space work | `kxkbrc` |
 | Spotlight (Cmd+Space) | Centred translucent search: apps, settings, calculator, unit and currency conversion | `plasmoids/net.local.spotlight` + `qml-blurbehind` |
 | Control Center | Wi-Fi, Bluetooth, VPN, Focus/DND, per-screen brightness, volume + output, Now Playing, keyboard backlight, battery mode | `plasmoids/net.local.controlcenter` |
 | Stats / iStat Menus | Menu-bar CPU/MEM sparklines, network Mbps, temp, watts; click for graphs, per-app CPU/memory/network | `plasmoids/net.local.macstats`, `bin/mac-stats*`, `system/bin/nethogs-feed` |
 | Quick Look (Space) | Space previews in Dolphin and on the desktop, arrow keys move between files, big window | GNOME Sushi + `bin/quicklook`, `bin/sushi-launch`, `bin/desktop-quicklook-patch` |
-| Volume / brightness HUD (27.2) | Glass card under the menu bar, top right, with a 16-segment level bar | `osd/` |
+| Volume / brightness HUD (27.2) | Clear Liquid Glass capsule under the menu bar, top right, outlined glyph, thin 16-segment bar | `osd/` (+ `qml-blurbehind`) |
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals) | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots | `system/bin/battery-limit` |

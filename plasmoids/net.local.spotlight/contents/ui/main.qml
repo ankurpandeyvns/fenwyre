@@ -58,13 +58,17 @@ PlasmoidItem {
     }
 
     compactRepresentation: MouseArea {
-        Layout.minimumWidth: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
-        Layout.preferredWidth: Layout.minimumWidth
+        // macOS 26+ shows no Spotlight icon in the menu bar; the widget stays for Cmd+Space only.
+        Layout.minimumWidth: 0
+        Layout.preferredWidth: 0
+        Layout.maximumWidth: 0
+        visible: false
         onClicked: root.toggle()
         Kirigami.Icon {
             anchors.centerIn: parent
             width: Kirigami.Units.iconSizes.small
             height: width
+            visible: false
             source: "system-search-symbolic"
             fallback: "edit-find"
             isMask: true

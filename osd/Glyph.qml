@@ -12,6 +12,7 @@ Item {
     property real level: 1          // 0..1, for speaker / sun / wifi
     property bool muted: false
     property real dimOpacity: 0.3
+    property bool outline: false     // draw filled shapes as outlines (macOS HUD style)
 
     implicitWidth: 16
     implicitHeight: 16
@@ -206,9 +207,10 @@ Item {
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
-            strokeWidth: -1
-            strokeColor: "transparent"
-            fillColor: g.color
+            strokeWidth: g.outline ? g.spec.w * 0.8 : -1
+            strokeColor: g.outline ? g.color : "transparent"
+            fillColor: g.outline ? "transparent" : g.color
+            joinStyle: ShapePath.RoundJoin
             fillRule: ShapePath.WindingFill
             PathSvg { path: g.spec.f || "M0,0" }
         }
