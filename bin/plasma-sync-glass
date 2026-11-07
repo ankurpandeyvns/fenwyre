@@ -12,7 +12,7 @@ from pathlib import Path
 
 THEMES = Path.home() / ".local/share/plasma/desktoptheme"
 GLASS = ("0.45", "#000000")  # popups, dock; both WhiteSur variants use white text
-CLEAR = ("0", "#000000")     # menu bar: no background at all, like macOS 26/27
+CLEAR = ("0.35", "#000000")     # menu bar: a light veil so white text stays readable on bright wallpapers
 # (svg, tint): the top bars are set to "opaque" so they use solid/ (no blur), made fully clear here
 TINTS = [("widgets/panel-background.svgz", GLASS), ("dialogs/background.svgz", GLASS),
          ("solid/widgets/panel-background.svgz", CLEAR)]

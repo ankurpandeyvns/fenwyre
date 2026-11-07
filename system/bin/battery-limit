@@ -45,7 +45,7 @@ status(){
   echo "Configured limit: ${LIMIT}%  (hysteresis ${HYST}%)  [$CONF]"
   [ -f "$END" ] && echo "Native end threshold: $(cat "$END")%" || echo "Native end threshold: not supported by this kernel"
   [ -f "$START" ] && echo "Native start threshold: $(cat "$START")%"
-  [ -f "$BEH" ] && echo "charge_behaviour: $(cat "$BEH")"
+  [ -f "$BEH" ] && echo "charge_behaviour: $(cat "$BEH")$(grep -q '\[auto-discharge\]' "$BEH" && echo '  (discharging to the limit while plugged in)')"
   command -v systemctl >/dev/null && echo "Service: $(systemctl is-active battery-limit.service 2>/dev/null)"
 }
 
@@ -70,10 +70,26 @@ daemon(){
   done
 }
 
+# AlDente-style discharge: a threshold only stops charging, so a battery above the limit just sits there
+# on AC. If the kernel offers charge_behaviour "auto-discharge" (Asahi macsmc), run from the battery
+# while plugged in until it is down to the threshold, then go back to normal.
+can_discharge(){ [ -f "$BEH" ] && grep -qw auto-discharge "$BEH"; }
+on_ac(){ local p; for p in "$SYS"/class/power_supply/*; do [ "$(cat "$p/type" 2>/dev/null)" = Mains ] && [ "$(cat "$p/online" 2>/dev/null)" = 1 ] && return 0; done; return 1; }
+discharge_loop(){
+  while :; do
+    local c t want=auto
+    c=$(cap); t=$(cat "$END" 2>/dev/null || echo 100)
+    [ -e /run/battery-limit.topup ] || { [ "$t" -lt 100 ] && [ "$c" -gt "$t" ] && on_ac && want=auto-discharge; }
+    grep -q "\[$want\]" "$BEH" || behaviour_set "$want"
+    [ "${1:-}" = --once ] && break
+    sleep 60
+  done
+}
+
 case "${1:-status}" in
   status) status ;;
   apply) need_root "$@"; apply ;;
-  daemon) need_root "$@"; apply; rc=$?; [ $rc = 3 ] && daemon "${2:-}"; [ $rc = 0 ] && [ "${2:-}" != --once ] && exec sleep infinity; exit $rc ;;
+  daemon) need_root "$@"; apply; rc=$?; [ $rc = 3 ] && daemon "${2:-}"; if [ $rc = 0 ]; then can_discharge && discharge_loop "${2:-}"; [ "${2:-}" != --once ] && exec sleep infinity; fi; exit $rc ;;
   off) need_root "$@"; printf 'LIMIT=100\nHYST=%s\n' "$HYST" > "$CONF"; LIMIT=100; apply; systemctl restart battery-limit.service 2>/dev/null; status ;;
   top-up) need_root "$@"; native_set 100 || true; behaviour_set auto; : > /run/battery-limit.topup; echo "Charging to 100% now; the ${LIMIT}% limit returns on next boot or 'battery-limit apply'." ;;
   [0-9]*) need_root "$@"
