@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""gpu-feed: per-process GPU time for the Mac Stats plasmoid (Activity Monitor's "% GPU").
+
+The asahi driver has no per-client fdinfo engine stats, so this follows the DRM GPU scheduler
+tracepoints in a private tracefs instance:
+  drm_sched_job_queue  runs in the submitting thread -> fence context -> process
+  drm_sched_job_run / drm_sched_job_done             -> how long each job was on the GPU
+Overlapping jobs split the elapsed time between them. It traces SAMPLE s of every PERIOD s
+(about 3000 events/s on a busy desktop; tracing all the time costs ~8% of a core) and writes
+/run/mac-stats/gpu.json: {"t": epoch, "procs": [[pid, share], ...]}, share = fraction of the
+GPU time traced in that window (sums to 1). Only PIDs and shares are written.
+"""
+import json, os, re, select, signal, sys, time
+
+OUT_DIR = "/run/mac-stats"
+OUT = os.path.join(OUT_DIR, "gpu.json")
+TRACING = "/sys/kernel/tracing"
+INST = os.path.join(TRACING, "instances", "mac_stats_gpu")
+EVENTS = ("drm_sched_job_queue", "drm_sched_job_run", "drm_sched_job_done")
+PERIOD = 2.0
+SAMPLE = 1.0
+LINE = re.compile(rb"^\s*.+?-(\d+)\s+\[\d+\]\s+\S+\s+(\d+\.\d+): drm_sched_job_(queue|run|done): .*?fence=(\d+):(\d+)")
+
+
+def events(on):
+    for e in EVENTS:
+        try:
+            with open(os.path.join(INST, "events", "gpu_scheduler", e, "enable"), "w") as f:
+                f.write("1" if on else "0")
+        except OSError:
+            if on:
+                raise
+
+
+def teardown(*_):
+    events(False)
+    try:
+        os.rmdir(INST)
+    except OSError:
+        pass
+    sys.exit(0)
+
+
+_tgid = {}
+
+
+def tgid(tid):
+    """Thread -> process id (the queue event names the submitting thread)."""
+    if tid in _tgid:
+        return _tgid[tid]
+    pid = tid
+    try:
+        with open(f"/proc/{tid}/status") as f:
+            for r in f:
+                if r.startswith("Tgid:"):
+                    pid = int(r.split()[1])
+                    break
+    except OSError:
+        pass
+    if len(_tgid) > 4096:
+        _tgid.clear()
+    _tgid[tid] = pid
+    return pid
+
+
+def write(shares):
+    tot = sum(shares.values())
+    procs = sorted(([p, round(v / tot, 4)] for p, v in shares.items() if v > 0), key=lambda x: -x[1]) if tot else []
+    tmp = OUT + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"t": time.time(), "procs": procs[:20]}, f)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, OUT)
+
+
+def main():
+    os.makedirs(OUT_DIR, mode=0o755, exist_ok=True)
+    if os.path.isdir(INST):            # left behind by a crash
+        events(False)
+        os.rmdir(INST)
+    os.mkdir(INST)
+    signal.signal(signal.SIGTERM, teardown)
+    signal.signal(signal.SIGINT, teardown)
+    with open(os.path.join(INST, "buffer_size_kb"), "w") as f:
+        f.write("2048")
+
+    ctx_pid = {}                 # fence context -> submitting process
+    inflight = {}                # (context, seqno) -> context
+    shares, last, buf = {}, None, b""
+    fd = os.open(os.path.join(INST, "trace_pipe"), os.O_RDONLY | os.O_NONBLOCK)
+    start = time.monotonic()
+    stop, due, tracing = start + SAMPLE, start + PERIOD, True
+    events(True)
+    while True:
+        now = time.monotonic()
+        if tracing and now >= stop:
+            events(False)
+            tracing = False
+        wake = stop if tracing else due
+        r, _, _ = select.select([fd], [], [], max(0.02, wake - now))
+        if r:
+            try:
+                chunk = os.read(fd, 1 << 16)
+            except BlockingIOError:
+                chunk = b""
+            buf += chunk
+            lines = buf.split(b"\n")
+            buf = lines.pop()
+            for l in lines:
+                m = LINE.match(l)
+                if not m:
+                    continue
+                tid, ts, kind, ctx, seq = m.groups()
+                if kind == b"queue":
+                    ctx_pid[ctx] = tgid(int(tid))
+                    continue
+                ts = float(ts)
+                if last is not None and inflight and ts > last:
+                    part = (ts - last) / len(inflight)
+                    for c in inflight.values():
+                        p = ctx_pid.get(c, 0)
+                        shares[p] = shares.get(p, 0.0) + part
+                last = ts
+                if kind == b"run":
+                    inflight[(ctx, seq)] = ctx
+                else:
+                    inflight.pop((ctx, seq), None)
+            if len(inflight) > 1024:     # lost done events (buffer overrun): start over
+                inflight.clear()
+        if not tracing and not r and time.monotonic() >= due:
+            shares.pop(0, None)
+            write(shares)
+            shares, last, buf = {}, None, b""
+            inflight.clear()             # their done events fell in the gap
+            stop, due, tracing = due + SAMPLE, due + PERIOD, True
+            events(True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    finally:
+        events(False)
+        try:
+            os.rmdir(INST)
+        except OSError:
+            pass

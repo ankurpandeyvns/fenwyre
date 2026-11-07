@@ -43,7 +43,7 @@ mxkeys|Apps|Logitech Mac mode|Switch Logitech keyboards (MX Keys) to macOS layou
 brightness|Apps|Brightness keys|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%)|no
 battery|System|Battery limit + fan profiles|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max)|yes
 audio|System|Bluetooth audio|LDAC adaptive bitrate (no skipping; hq option in the file); Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
-netstats|System|Per-app network + SF font|Root packet-capture feed for Mac Stats per-app network; SF Pro preferred over other sans fonts|yes
+netstats|System|Per-app network/GPU + SF font|Root feeds for Mac Stats per-app network (packet capture) and GPU (scheduler tracepoints); SF Pro preferred over other sans fonts|yes
 windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size/position (agent creates them, see AGENTS.md)|no
 '
 feature_units() {   # feature -> units, in no particular order (apply() orders and de-duplicates)
@@ -250,6 +250,12 @@ unit_netfeed() {
     sudo install -m755 "$HERE/system/bin/nethogs-feed" /usr/local/bin/nethogs-feed
     sudo install -m644 "$HERE/system/systemd/nethogs-feed.service" /etc/systemd/system/nethogs-feed.service
     sudo systemctl daemon-reload; sudo systemctl enable --now nethogs-feed.service
+    if [ -d /sys/kernel/tracing/events/gpu_scheduler ]; then
+        say "root: per-app GPU feed for Mac Stats"
+        sudo install -m755 "$HERE/system/bin/gpu-feed" /usr/local/bin/gpu-feed
+        sudo install -m644 "$HERE/system/systemd/gpu-feed.service" /etc/systemd/system/gpu-feed.service
+        sudo systemctl daemon-reload; sudo systemctl enable --now gpu-feed.service
+    fi
 }
 unit_fans() {
     say "root: fan profiles (patched macsmc-hwmon for $(uname -r), mac-fand)"

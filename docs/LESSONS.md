@@ -166,3 +166,18 @@
   20 s btmon capture with no stalls: brief radio dips with nothing to back off to. Adaptive (`auto`) avoids that at
   the cost of a lower bitrate most of the time; the user chose adaptive.
 
+
+## Per-app GPU usage (asahi)
+
+- The asahi DRM driver exposes no `drm-engine-*` keys in fdinfo, so nvtop/Activity Monitor-style per-process GPU %
+  is not available from the usual source. `agx_stats` `busy_ns` gives only the total.
+- The `gpu_scheduler` tracepoints work: `drm_sched_job_queue` fires in the submitting thread (its pid, mapped to the
+  tgid, owns the fence context), `drm_sched_job_run`/`drm_sched_job_done` bracket each job. `client_id` is always 0 on
+  asahi, so don't key on it. Split overlapping jobs' elapsed time between them, then scale the shares by `busy_ns`
+  utilization. Checked against SIGSTOP-ing the suspect: pausing Helium's GPU process dropped busy 57% → 9%, and the
+  feed attributed ~69% of GPU time to it.
+- ~3000 events/s on a busy desktop: tracing continuously from Python costs ~8% of a core; sampling 1 s of every 2
+  costs ~2%. Use a private tracefs instance (`instances/mac_stats_gpu`) so the global trace buffer is untouched.
+- Utilization is busy time at the *current* clock: 56% at 388 MHz (pstate 1 of 1296 MHz) is a small amount of work
+  at ~2 W. Hardware video decode (`/dev/video0` = `avd`) only takes the decoding off the GPU; Chromium still uses the
+  GPU to convert/scale each frame and composite the page, and KWin composites it again.

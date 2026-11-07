@@ -2,7 +2,7 @@
 """mac-stats-detail: one JSON snapshot for the Mac Stats plasmoid dropdown (Stats/iStat-style).
 
 CPU split + per-core, top processes by CPU and memory, memory breakdown + pressure,
-network rates/totals/addresses, sensors (via mac-stats). Deltas use a shared state file;
+network rates/totals/addresses, GPU (per app via gpu-feed), sensors (via mac-stats). Deltas use a shared state file;
 calls within 1.5 s of the last sample reuse it, so several panel instances share one sample.
 """
 import importlib.machinery, importlib.util, json, os, re, socket, struct, time
@@ -331,6 +331,25 @@ def sample():
             a[0] += up; a[1] += down
     top_net = [labels[k] + v for k, v in sorted(net_by.items(), key=lambda x: -(x[1][0] + x[1][1]))[:5]]
 
+    # Per-app GPU share from gpu-feed.service (DRM scheduler tracepoints), grouped like above.
+    gpu_by = {}
+    try:
+        gf = json.loads(rd("/run/mac-stats/gpu.json", "{}"))
+    except ValueError:
+        gf = {}
+    if gf and now - gf.get("t", 0) < 6:
+        for pid, share in gf.get("procs", []):
+            pid = str(pid)
+            if pid not in pr:
+                continue
+            comm = pr[pid][0]
+            k, leader, scope = group_of(pid, comm, None)
+            if k not in resolved:
+                lb = label(k, leader, scope, comm, pid, idx)
+                resolved[k] = lb[0]
+                labels.setdefault(lb[0], lb)
+            gpu_by[resolved[k]] = gpu_by.get(resolved[k], 0) + share
+
     m = meminfo()
     total, avail = m["MemTotal"], m["MemAvailable"]
     zo, zc = zram()
@@ -362,7 +381,9 @@ def sample():
                "pstate": ps, "mhz": fr[ps] if 0 <= ps < len(fr) else None,
                "maxMhz": max(fr) if fr else None, "jobs": round(jobs),
                "mem": g.get("user_resident", 0) + g.get("kernel_resident", 0),
-               "memUser": g.get("user_resident", 0), "memKernel": g.get("kernel_resident", 0)}
+               "memUser": g.get("user_resident", 0), "memKernel": g.get("kernel_resident", 0),
+               "top": [labels[k] + [round(util * v, 1)] for k, v in sorted(gpu_by.items(), key=lambda x: -x[1])[:5]],
+               "perApp": bool(gf)}
 
     temps, fans, powers = ms.hwmon()
     bat = ms.battery()

@@ -716,6 +716,11 @@ PlasmoidItem {
                 Row2 { k: "Apps"; v: root.g ? root.fmtBytes(root.g.memUser) : "–" }
                 Row2 { k: "Driver"; v: root.g ? root.fmtBytes(root.g.memKernel) : "–" }
                 Row2 { k: "Jobs per second"; v: root.g ? root.g.jobs.toLocaleString(Qt.locale(), "f", 0) : "–" }
+                Section { text: "TOP APPS"; visible: !!(root.g && root.g.perApp) }
+                Repeater {
+                    model: root.g && root.g.top ? root.g.top : []
+                    ProcRow { name: modelData[0]; icon: modelData[1]; v: modelData[2].toFixed(1) + "%" }
+                }
             }
 
             // Network

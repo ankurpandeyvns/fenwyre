@@ -105,7 +105,8 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 - **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
   PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
   (`sudo timeout 4 btmon`: adaptive ~660-990 kbps; `hq` ~1 Mbps).
-- **netstats**: `cat /run/mac-stats/net.json` updates every 2 s.
+- **netstats**: `cat /run/mac-stats/net.json` and `/run/mac-stats/gpu.json` update every 2 s; the GPU tab lists top apps whose
+  % add up to the utilization (`gpu-feed` traces 1 s of every 2, ~2% of a core).
 - **windows**: create `~/.config/kwinrulesrc` rules, one per app the user chose, with
   `sizerule=4 positionrule=4 maximizehorizrule=4 maximizevertrule=4` (4 = Remember), matched on the window class
   (`w.resourceClass` from a KWin script; Chromium `--app` windows need a substring match). Apply with
