@@ -1,0 +1,14 @@
+{
+    "KPackageStructure": "Plasma/Wallpaper",
+    "KPlugin": {
+        "Authors": [ { "Name": "ankur (local build)" } ],
+        "Category": "",
+        "Description": "Animated 1-bit Macintosh scenes (Susan Kare pixel art) on a tilted plane, after macOS Sequoia's Macintosh wallpaper. Runs Apple's .program scene scripts.",
+        "Icon": "preferences-desktop-wallpaper",
+        "Id": "net.local.macintosh",
+        "License": "GPL-2.0-or-later",
+        "Name": "Macintosh",
+        "Version": "1.0"
+    },
+    "X-KDE-ParentApp": "org.kde.plasmashell"
+}

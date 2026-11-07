@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd" >
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="Scene" type="String">
+      <label>Scene program to play, or "Cycle" to play all of them in random order</label>
+      <default>Cycle</default>
+    </entry>
+    <entry name="Colour" type="String">
+      <label>Spectrum, Accent, Blue, Red, Purple, Yellow, Dark Gray, Gray, Green, Orange or Random</label>
+      <default>Spectrum</default>
+    </entry>
+    <entry name="Appearance" type="String">
+      <label>Automatic (follow the colour scheme), Light or Dark</label>
+      <default>Automatic</default>
+    </entry>
+    <entry name="Speed" type="Double">
+      <label>Playback speed multiplier</label>
+      <default>1.0</default>
+    </entry>
+    <entry name="PauseWhenCovered" type="Bool">
+      <label>Stop animating while a maximized or full-screen window is on this screen</label>
+      <default>true</default>
+    </entry>
+  </group>
+</kcfg>

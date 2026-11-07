@@ -1,0 +1,125 @@
+//
+//  MacWrite
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "MacWrite1984"
+	let cursor = "None"
+	let ramp = "None"
+	add menu at 267, 18 size 52, 18 name "MacWriteStyleMenu"		// [ext] pull-down menu
+end simultaneous
+
+gosub nineteen
+gosub style
+gosub crazy
+gosub empty
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+nineteen:
+
+	start simultaneous
+		let scene = "1984"
+		let image = "MacWrite1984"
+		let cursor = "None"
+		let ramp = "Right"
+		camera to -22.5, 45
+		scroll to 140, 110
+	end simultaneous
+
+	scroll to 370, 140 over 24 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+style:
+
+	start simultaneous
+		let scene = "style"
+		let image = "MacWriteCrazyOnes"
+		let cursor = "Automatic"
+		let ramp = "Down"
+		camera to 22.5, 45
+		mouse to 360, 120
+		scroll to 300, 50
+		reset controls
+	end simultaneous
+
+	scroll to 320, 200 over 18 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait for 1 second
+	mouse to 292, 10 over 1.5 seconds curve easeout
+	wait for 0.5 seconds
+	mouse down
+	wait for 2 seconds
+	mouse to 300, 60 over 2 seconds curve easeout
+	wait for 1 second
+	mouse to 300, 160 over 3 seconds curve easeout
+	wait for 1.5 seconds
+	mouse up
+	mouse to 420, 180 over 1.5 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+crazy:
+
+	start simultaneous
+		let scene = "crazy"
+		let image = "MacWriteCrazyOnes"
+		let cursor = "None"
+		let ramp = "Left"
+		camera to -22.5, 45
+		scroll to 470, 120
+	end simultaneous
+
+	scroll to 60, 120 over 27 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+empty:
+
+	start simultaneous
+		let scene = "empty"
+		let image = "MacWriteEmpty"
+		let cursor = "None"
+		let ramp = "Right"
+		camera to 22.5, 45
+		scroll to 30, 60
+		add caret at 9, 107 size 1, 12
+	end simultaneous
+
+	scroll to 250, 60 over 16 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

@@ -30,7 +30,8 @@ touches to `~/kde-pre-mac-backup/`.
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |
-| Live wallpaper | Apple aerial videos via Smart Video Wallpaper Reborn; Macintosh (Susan Kare) live wallpaper in progress | AGENTS.md step 11 |
+| Macintosh live wallpaper (Sequoia) | Susan Kare 1-bit scenes as tilted coloured pixel tiles that zoom, scroll and animate; Spectrum and 10 other colours; 10 scenes | `wallpapers/net.local.macintosh` |
+| Aerial wallpaper | Apple aerial videos via Smart Video Wallpaper Reborn | AGENTS.md step 11 |
 
 ## Not possible (and why)
 
@@ -60,11 +61,15 @@ bin/                user helpers (installed to ~/.local/bin)
 systemd/user/       user services for those helpers
 system/             root helpers + units (battery-limit, nethogs-feed)
 plasmoids/          Spotlight, Control Center, Mac Stats widgets
+wallpapers/         Macintosh live wallpaper (interprets Apple's .program scene scripts)
 look-and-feel/      macOS Light / macOS Dark global themes
 qml-blurbehind/     tiny C++ QML plugin: ask KWin to blur behind a QML item
 plasma-scripts/     Plasma scripting snippets (panel widgets, tray, launcher icon)
 config/             launchers, D-Bus services, Dolphin service menu, Konsole, fontconfig, KRunner plugins
 docs/LESSONS.md     traps and how they were solved
 ```
+
+`wallpapers/net.local.macintosh` contains Apple's Macintosh artwork and two of Apple's scene scripts, for
+personal use only. **Keep this repository private.**
 
 Files containing `@HOME@` are templates; the installer substitutes your home directory.

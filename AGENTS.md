@@ -81,7 +81,13 @@ how to verify it, and what not to do.
     WhiteSur variants use white text, so both use black at 45%. Spotlight uses the same tint. Verify by
     screenshotting the bar and an open Control Center popup over the same wallpaper.
 
-11. **Wallpaper**: Smart Video Wallpaper Reborn (`luisbocanegra.smart.video.wallpaper.reborn`) with Apple
+11. **Wallpaper**: the Macintosh live wallpaper is installed by `./install.sh plasmoids`. Apply it with
+    Plasma scripting: `desktops().forEach(function(d){d.wallpaperPlugin="net.local.macintosh"})`, and set
+    `Colour=Spectrum`, `Scene=Cycle` in the `["Wallpaper","net.local.macintosh","General"]` group.
+    `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's, byte-identical;
+    `programs/authored/` follow the same style, with extensions marked `// [ext]`). Expect about 11% of
+    one CPU core with three screens animating; it pauses under maximized windows.
+    Alternative: Smart Video Wallpaper Reborn (`luisbocanegra.smart.video.wallpaper.reborn`) with Apple
     aerials. The macOS 26 manifest is
     `https://configuration.apple.com/configurations/internetservices/aerials/resources-config-26-0.plist`
     (points to a resources tar with `entries.json`; videos on sylvan.apple.com need Apple's root CA). Set

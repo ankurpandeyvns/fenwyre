@@ -1,0 +1,114 @@
+//
+//  Alert Sounds
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "AlertSounds"
+	let cursor = "None"
+	let ramp = "None"
+	add radiobuttongroup
+	add selectable at 256, 86 size 137, 12 value 1 action "Simple Beep"		// [ext]
+	add selectable at 256, 98 size 137, 12 value 0 action "Clink-Klank"		// [ext]
+	add selectable at 256, 110 size 137, 12 value 0 action "Boing"			// [ext]
+	add selectable at 256, 122 size 137, 12 value 0 action "Monkey"			// [ext]
+	add cursorrect at 256, 194 size 137, 120 name "Arrow"
+end simultaneous
+
+gosub sounds
+gosub volume
+gosub categories
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+sounds:
+
+	start simultaneous
+		let scene = "sounds"
+		let cursor = "Automatic"
+		let ramp = "Right"
+		camera to -22.5, 45
+		mouse to 372, 160
+		scroll to 262, 100
+		reset controls
+	end simultaneous
+
+	scroll to 384, 100 over 19 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait for 1.5 seconds
+
+	mouse to 300, 93 over 1.5 seconds curve easeout
+	wait for 0.5 seconds
+	mouse click
+
+	wait for 1.5 seconds
+
+	mouse to 288, 105 over 0.75 seconds curve easeout
+	wait for 0.5 seconds
+	mouse click
+
+	wait for 1.5 seconds
+
+	mouse to 318, 117 over 0.75 seconds curve easeout
+	wait for 0.5 seconds
+	mouse click
+
+	wait for 1 second
+
+	mouse to 410, 150 over 1.5 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+volume:
+
+	start simultaneous
+		let scene = "volume"
+		let cursor = "None"
+		let ramp = "Up"
+		camera to 22.5, 45
+		scroll to 214, 200
+	end simultaneous
+
+	scroll to 214, 90 over 15 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+categories:
+
+	start simultaneous
+		let scene = "categories"
+		let cursor = "None"
+		let ramp = "Down"
+		camera to -22.5, 45
+		scroll to 138, 50
+	end simultaneous
+
+	scroll to 138, 290 over 22 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

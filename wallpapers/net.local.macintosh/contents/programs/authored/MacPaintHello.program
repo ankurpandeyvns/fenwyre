@@ -1,0 +1,134 @@
+//
+//  MacPaint Hello / Quit Dialog
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "QuitDialog"
+	let cursor = "None"
+	let ramp = "None"
+	add button at 304, 179 name "CancelButton" action "cancel"		// [ext] push button
+	add canvas at 84, 289 size 412, 238								// [ext] pencil drawing area
+end simultaneous
+
+gosub quit
+gosub hello
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+quit:
+
+	start simultaneous
+		let scene = "quit"
+		let image = "QuitDialog"
+		let cursor = "Automatic"
+		let ramp = "Right"
+		camera to -22.5, 45
+		mouse to 150, 230
+		scroll to 170, 160
+		reset controls
+	end simultaneous
+
+	scroll to 360, 160 over 20 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait for 1 second
+	mouse to 203, 150 over 2 seconds curve easeout
+	wait for 2 seconds
+	mouse to 210, 172 over 1 second curve easeout
+	wait for 1.5 seconds
+	mouse to 341, 171 over 3 seconds curve easeout
+	wait for 0.75 seconds
+	mouse down
+	wait for 0.3 seconds
+	mouse up
+	wait for 1 second
+	mouse to 400, 230 over 2 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+hello:
+
+	start simultaneous
+		let scene = "hello"
+		let image = "MacPaintHello"
+		let cursor = "Pencil"
+		let ramp = "Right"
+		camera to 22.5, 45
+		mouse to 180, 230
+		scroll to 190, 165
+		reset controls
+	end simultaneous
+
+	scroll to 320, 165 over 20 seconds async "scroll"
+	scale in over 3 seconds
+
+	mouse to 205, 199 over 1.5 seconds curve easeout
+	wait for 0.5 seconds
+	mouse down
+	mouse to 216, 181 over 0.2 seconds
+	mouse to 224, 157 over 0.2 seconds
+	mouse to 220, 150 over 0.2 seconds
+	mouse to 214, 154 over 0.2 seconds
+	mouse to 212, 175 over 0.2 seconds
+	mouse to 211, 199 over 0.2 seconds
+	mouse to 212, 190 over 0.2 seconds
+	mouse to 220, 182 over 0.2 seconds
+	mouse to 228, 182 over 0.2 seconds
+	mouse to 230, 190 over 0.2 seconds
+	mouse to 232, 199 over 0.2 seconds
+	mouse to 236, 194 over 0.2 seconds
+	mouse to 248, 192 over 0.2 seconds
+	mouse to 250, 186 over 0.2 seconds
+	mouse to 244, 182 over 0.2 seconds
+	mouse to 236, 187 over 0.2 seconds
+	mouse to 236, 196 over 0.2 seconds
+	mouse to 244, 200 over 0.2 seconds
+	mouse to 254, 198 over 0.2 seconds
+	mouse to 258, 193 over 0.2 seconds
+	mouse to 266, 169 over 0.2 seconds
+	mouse to 268, 154 over 0.2 seconds
+	mouse to 264, 151 over 0.2 seconds
+	mouse to 259, 157 over 0.2 seconds
+	mouse to 259, 181 over 0.2 seconds
+	mouse to 262, 199 over 0.2 seconds
+	mouse to 269, 200 over 0.2 seconds
+	mouse to 274, 193 over 0.2 seconds
+	mouse to 283, 169 over 0.2 seconds
+	mouse to 284, 154 over 0.2 seconds
+	mouse to 280, 151 over 0.2 seconds
+	mouse to 276, 157 over 0.2 seconds
+	mouse to 276, 181 over 0.2 seconds
+	mouse to 278, 199 over 0.2 seconds
+	mouse to 285, 200 over 0.2 seconds
+	mouse to 294, 188 over 0.2 seconds
+	mouse to 288, 193 over 0.2 seconds
+	mouse to 289, 199 over 0.2 seconds
+	mouse to 296, 200 over 0.2 seconds
+	mouse to 301, 193 over 0.2 seconds
+	mouse to 296, 187 over 0.2 seconds
+	mouse to 292, 188 over 0.2 seconds
+	mouse to 301, 190 over 0.2 seconds
+	mouse to 308, 187 over 0.2 seconds
+	mouse up
+	mouse to 360, 220 over 2 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

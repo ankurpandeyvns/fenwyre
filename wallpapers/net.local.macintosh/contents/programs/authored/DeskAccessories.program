@@ -1,0 +1,123 @@
+//
+//  Desk Accessories
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "DeskAccessories"
+	let cursor = "None"
+	let ramp = "None"
+	add button at 213, 152 size 16, 14 action "calc:C"		// [ext] calculator keys
+	add button at 213, 174 size 16, 14 action "calc:7"
+	add button at 235, 174 size 16, 14 action "calc:8"
+	add button at 257, 174 size 16, 14 action "calc:9"
+	add button at 213, 196 size 16, 14 action "calc:4"
+	add button at 235, 196 size 16, 14 action "calc:5"
+	add button at 257, 196 size 16, 14 action "calc:6"
+	add button at 213, 218 size 16, 14 action "calc:1"
+	add button at 235, 218 size 16, 14 action "calc:2"
+	add button at 257, 218 size 16, 14 action "calc:3"
+	add display at 293, 117 name "Geneva12"			// [ext] calculator read-out
+	add puzzle at 400, 200 value 50						// [ext] sliding puzzle, one move per 50 ticks
+end simultaneous
+
+gosub calculator
+gosub puzzle
+gosub keypad
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+calculator:
+
+	start simultaneous
+		let scene = "calculator"
+		let cursor = "Automatic"
+		let ramp = "Right"
+		camera to -22.5, 45
+		mouse to 300, 240
+		scroll to 196, 150
+		reset controls
+	end simultaneous
+
+	scroll to 312, 150 over 20 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait for 1 second
+
+	mouse to 221, 146 over 1 second curve easeout
+	wait for 0.4 seconds
+	mouse click
+
+	mouse to 221, 212 over 0.8 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	mouse to 265, 168 over 0.8 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	mouse to 243, 168 over 0.6 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	mouse to 221, 190 over 0.6 seconds curve easeout
+	wait for 0.3 seconds
+	mouse click
+
+	wait for 1 second
+	mouse to 330, 120 over 2 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+puzzle:
+
+	start simultaneous
+		let scene = "puzzle"
+		let cursor = "None"
+		let ramp = "Down"
+		camera to 22.5, 45
+		scroll to 440, 100
+	end simultaneous
+
+	scroll to 440, 215 over 16 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+keypad:
+
+	start simultaneous
+		let scene = "keypad"
+		let cursor = "None"
+		let ramp = "Up"
+		camera to 22.5, 45
+		scroll to 255, 250
+	end simultaneous
+
+	scroll to 255, 110 over 15 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

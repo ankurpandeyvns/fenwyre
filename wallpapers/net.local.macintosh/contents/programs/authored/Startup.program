@@ -1,0 +1,89 @@
+//
+//  Startup
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "StartupDesktop"
+	let cursor = "None"
+	let ramp = "None"
+end simultaneous
+
+gosub disk
+gosub happy
+gosub welcome
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+disk:
+
+	start simultaneous
+		let scene = "disk"
+		let image = "StartupDesktop"
+		let ramp = "Down"
+		camera to 22.5, 45
+		scroll to 256, 110
+		remove controls											// [ext]
+		add icon at 240, 186 value 40 name "StartupIcons" frames "0,1"	// [ext] frames
+	end simultaneous
+
+	scroll to 256, 230 over 14 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+happy:
+
+	start simultaneous
+		let scene = "happy"
+		let image = "StartupDesktop"
+		let ramp = "Right"
+		camera to -22.5, 45
+		scroll to 190, 171
+		remove controls											// [ext]
+		add icon at 240, 186 value 60 name "StartupIcons" frames "2"	// [ext] frames
+	end simultaneous
+
+	scroll to 322, 171 over 14 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+welcome:
+
+	start simultaneous
+		let scene = "welcome"
+		let image = "StartupWelcome"
+		let ramp = "Left"
+		camera to 22.5, 45
+		scroll to 400, 110
+		remove controls											// [ext]
+	end simultaneous
+
+	scroll to 110, 110 over 22 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,99 @@
+//
+//  Finder
+//  Macintosh 40th Anniversary - AUTHORED program (not from Apple)
+//
+//  Written for the KDE Plasma "Macintosh" wallpaper in the style of Apple's
+//  IconGarden.program / System6ControlPanel.program. Extensions used beyond
+//  Apple's command set are marked [ext].
+//
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+start simultaneous
+	scale out
+	let image = "FinderWindow"
+	let cursor = "None"
+	let ramp = "None"
+	add radiobuttongroup
+	add selectable at 292, 182 size 60, 9 value 0 action "select"	// [ext] icon name highlight
+end simultaneous
+
+gosub window
+gosub menubar
+gosub trash
+
+exit
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+window:
+
+	start simultaneous
+		let scene = "window"
+		let image = "FinderWindow"
+		let cursor = "Automatic"
+		let ramp = "Right"
+		camera to -22.5, 45
+		mouse to 250, 230
+		scroll to 290, 150
+		reset controls
+	end simultaneous
+
+	scroll to 470, 150 over 22 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait for 1.5 seconds
+	mouse to 322, 160 over 2 seconds curve easeout
+	wait for 0.5 seconds
+	mouse click
+	wait for 2 seconds
+	mouse to 470, 120 over 3 seconds curve easeout
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+menubar:
+
+	start simultaneous
+		let scene = "menubar"
+		let image = "FinderWindow"
+		let cursor = "None"
+		let ramp = "Left"
+		camera to 22.5, 45
+		scroll to 230, 40
+	end simultaneous
+
+	scroll to 40, 40 over 16 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------
+
+trash:
+
+	start simultaneous
+		let scene = "trash"
+		let image = "FinderTrash"
+		let cursor = "None"
+		let ramp = "Down"
+		camera to -22.5, 45
+		scroll to 455, 110
+		reset controls
+	end simultaneous
+
+	scroll to 455, 300 over 18 seconds async "scroll"
+	scale in over 3 seconds
+
+	wait until 3 seconds before "scroll" completes
+	scale out over 3 seconds
+
+	return
+
+//-------------------------------------------------------------------------------------------------------------------------------------------------

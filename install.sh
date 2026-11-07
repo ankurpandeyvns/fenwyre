@@ -36,9 +36,9 @@ step_bin() {
 }
 
 step_plasmoids() {
-    say "Plasma widgets, global themes"
-    for d in "$HERE"/plasmoids/*/ "$HERE"/look-and-feel/*/; do
-        local kind=plasmoids; [[ $d == */look-and-feel/* ]] && kind=look-and-feel
+    say "Plasma widgets, wallpaper, global themes"
+    for d in "$HERE"/plasmoids/*/ "$HERE"/look-and-feel/*/ "$HERE"/wallpapers/*/; do
+        local kind=plasmoids; [[ $d == */look-and-feel/* ]] && kind=look-and-feel; [[ $d == */wallpapers/* ]] && kind=wallpapers
         local dst=$HOME/.local/share/plasma/$kind/$(basename "$d")
         mkdir -p "$dst"; (cd "$d" && find . -type f) | while read -r f; do put "$d/$f" "$dst/$f"; done
     done
