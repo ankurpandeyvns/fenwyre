@@ -332,20 +332,40 @@ PlasmoidItem {
             }
             root.open(best);
         }
-        // Hidden Bar-style chevron: collapses the stats so narrow screens keep room for the
-        // app menu and the clock. "auto" = collapsed when this screen is narrower than 1200 px.
-        readonly property bool collapsed: {
-            const c = Plasmoid.configuration.collapse;
-            if (c === "hidden") return true;
-            if (c === "shown") return false;
-            return Screen.width > 0 && Screen.width < 1200;
+        // Hidden Bar-style chevron, only when the bar runs out of room (a narrow screen, or a long app
+        // menu): then the stats collapse behind « so the clock stays visible; » collapses them again.
+        // Room = the panel layout's width vs every other widget's minimum width (the spacer's is ~0,
+        // the app menu's follows its menus) plus the stats at full width.
+        readonly property Item panelLayout: {
+            let it = compact;
+            while (it && it.columnSpacing === undefined) it = it.parent;   // the panel GridLayout
+            return it;
         }
-        Layout.minimumWidth: chevron.width + (collapsed ? 0 : row.implicitWidth + Kirigami.Units.smallSpacing)
-                             + Kirigami.Units.smallSpacing * 2
+        readonly property real expandedWidth: row.implicitWidth + Kirigami.Units.smallSpacing * 3
+        readonly property bool overflow: {
+            const g = panelLayout;
+            if (!g || g.width <= 0) return false;
+            let need = expandedWidth, n = 1;
+            for (let i = 0; i < g.children.length; i++) {
+                const c = g.children[i];
+                if (!c.visible || c.applet === undefined || c.applet === null) continue;
+                let mine = false;
+                for (let it = compact; it; it = it.parent) if (it === c) { mine = true; break; }
+                if (mine) continue;
+                const w = Math.min(c.Layout.minimumWidth, c.Layout.maximumWidth);
+                if (w > 0) { need += w; n++; }
+            }
+            return need + g.columnSpacing * (n - 1) > g.width;
+        }
+        readonly property bool collapsed: overflow && Plasmoid.configuration.collapse !== "shown"
+        readonly property real chevronGap: Kirigami.Units.largeSpacing * 1.5     // room right of the arrows
+        Layout.minimumWidth: (chevron.visible ? chevron.width + chevronGap : 0)
+                             + (collapsed ? 0 : row.implicitWidth) + Kirigami.Units.smallSpacing * 2
         Layout.preferredWidth: Layout.minimumWidth
 
         PlasmaComponents.Label {
             id: chevron
+            visible: compact.overflow
             anchors.left: parent.left
             anchors.leftMargin: Kirigami.Units.smallSpacing
             anchors.verticalCenter: parent.verticalCenter
@@ -358,15 +378,15 @@ PlasmoidItem {
                 anchors.fill: parent
                 anchors.margins: -Kirigami.Units.smallSpacing
                 hoverEnabled: true
-                onClicked: Plasmoid.configuration.collapse = compact.collapsed ? "shown" : "hidden"
+                onClicked: Plasmoid.configuration.collapse = compact.collapsed ? "shown" : "auto"
             }
         }
 
         RowLayout {
             id: row
             visible: !compact.collapsed
-            anchors.left: chevron.right
-            anchors.leftMargin: Kirigami.Units.smallSpacing
+            anchors.left: chevron.visible ? chevron.right : parent.left
+            anchors.leftMargin: chevron.visible ? compact.chevronGap : Kirigami.Units.smallSpacing
             anchors.verticalCenter: parent.verticalCenter
             spacing: Math.round(Kirigami.Units.smallSpacing * 1.5)
 

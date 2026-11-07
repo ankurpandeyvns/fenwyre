@@ -5,7 +5,7 @@
   <kcfgfile name=""/>
   <group name="General">
     <entry name="collapse" type="String">
-      <label>Menu bar stats: "auto" (collapsed on screens narrower than 1200 px), "shown" or "hidden"</label>
+      <label>Menu bar stats when the bar runs out of room: "auto" (collapse behind the chevron) or "shown"</label>
       <default>auto</default>
     </entry>
   </group>

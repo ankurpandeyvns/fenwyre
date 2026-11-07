@@ -143,5 +143,7 @@
 
 ## Narrow screens
 - A portrait 1080p monitor at 1.25 gives an 864 px menu bar: app menu + stats push the clock off. Mac Stats has a
-  Hidden Bar-style chevron (`collapse` = auto/shown/hidden per widget; auto collapses below 1200 px).
+  Hidden Bar-style « » toggle that appears only when the bar overflows: the panel GridLayout's width vs the other
+  widgets' `Layout.minimumWidth` (spacer ~1, app menu = its menus) plus the stats at full width. `Screen.*` inside a
+  panel widget reported eDP-1 on every screen, so don't size by screen.
 
