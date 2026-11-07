@@ -156,6 +156,10 @@
 - M1 Pro/Max die keys (Stats `values.swift`): Tp01..Tp0b P-cores, Tp09/Tp0T E-cores, Tg05/0D/0L/0T GPU. Each comes in
   a triplet (x0/x1/x2); x1 is what Stats shows, x2 runs ~5 C hotter.
 - The kernel is clang-built but has no CFI/LTO/randstruct/modversions, so a gcc-built module loads fine.
-- Apple doesn't publish fan curves; macOS keeps these fans at 0 rpm at idle. The "macOS" profile here (off below
-  60 C, min..max over 60..95 C) is an approximation, not Apple's table.
+- Apple doesn't publish fan curves; macOS keeps these fans at 0 rpm at idle and lets the chip run hot before
+  ramping. A fixed curve with a 6 C hysteresis kept the fans on forever (this chip idles at 55-59 C with animated
+  wallpapers) and a 4 s burst to 66 C started them. mac-fand's "macos" profile is a silence-first controller instead:
+  10 s smoothing, 30 s least-squares trend, 60 s prediction; start at 60 C only if the prediction reaches 70 C;
+  creep up by 0.15% of the fan range per cycle per degree the prediction exceeds 80 C; full speed only at 90 C+,
+  still rising, fans already past 60%; stop below 58 C after 30 s.
 

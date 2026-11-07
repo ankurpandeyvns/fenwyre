@@ -6,9 +6,14 @@ lets a target below the fan minimum stop the fan, and the SoC die keys give the 
 thermal zone (hottest of the CPU/GPU die sensors, the same ones Stats/iStat show on macOS).
 
 Profile (one word in /var/lib/mac-fan/profile, re-read every cycle):
-  macos   fans off until the die reaches 60 C, then from the minimum speed up to full at 95 C;
-          off again below 54 C (default)
-  high    like macOS "High Power": fans from 50 C, full at 85 C, never off once started until 45 C
+  macos   silence first, like Apple: fans stay off while the chip is cool or only briefly busy; once
+          the smoothed die temperature passes 60 C and the trend predicts it will keep climbing, the
+          fans start at their minimum and creep up only as fast as the predicted overshoot of 80 C
+          demands. Full speed only when the chip is at 90 C or more, still rising, with the fans
+          already past 60%: the point where airflow, not silence, has to win. Off again once below
+          58 C for 30 s. (default)
+  high    the same controller tuned for temperature over silence (like macOS "High Power"):
+          starts at 50 C, holds about 70 C, ramps four times faster
   max     both fans at full speed
   apple   hand the fans to the SMC firmware (what Linux does without this daemon)
 
@@ -21,10 +26,22 @@ import glob, json, os, signal, sys, time
 PROFILE_FILE = "/var/lib/mac-fan/profile"
 STATE_DIR = "/run/mac-fan"
 PERIOD = 2.0
-CURVES = {          # (start C, stop C, full C)
-    "macos": (60.0, 54.0, 95.0),
-    "high": (50.0, 45.0, 85.0),
+# Controller tuning per profile:
+#   start    smoothed die temperature at which the fans may start
+#   stop     ... below which they stop again (after STOP_AFTER seconds)
+#   hold     temperature the controller steers the predicted value towards while the fans run
+#   up/down  speed change per cycle, as a fraction of the fan range per degree of predicted error
+TUNING = {
+    "macos": dict(start=60.0, stop=58.0, hold=80.0, up=0.0015, down=0.0008),
+    "high": dict(start=50.0, stop=48.0, hold=70.0, up=0.006, down=0.002),
 }
+STOP_AFTER = 30.0    # seconds below `stop` before the fans stop (no on/off flapping)
+SMOOTH_TAU = 10.0    # s, die temperature smoothing (ignores short bursts)
+TREND_WINDOW = 30.0  # s of history for the temperature trend
+HORIZON = 60.0       # s ahead the controller predicts
+MAX_AT = 90.0        # full speed when at/above this, still rising, and the fans past MAX_FROM
+MAX_FROM = 0.6
+MAX_RELEASE = 85.0   # leave full speed below this
 EMERGENCY, EMERGENCY_CLEAR = 95.0, 90.0
 
 
@@ -121,49 +138,78 @@ def main():
     signal.signal(signal.SIGINT, stop)
 
     spinning = False
+    speed = 0.0            # 0..1 of the fan range (min..max rpm) while spinning
+    full = False
+    cool_since = None
     emergency = False
-    current = {}
+    smooth = None
+    history = []           # (monotonic time, smoothed temperature)
     try:
         while running["on"]:
             p = profile()
             t = die_temp()
+            now = time.monotonic()
             mode = p
+            pred = None
+            if t is not None:
+                a = 1.0 - pow(2.718281828, -PERIOD / SMOOTH_TAU)
+                smooth = t if smooth is None else smooth + a * (t - smooth)
+                history.append((now, smooth))
+                history = [h for h in history if now - h[0] <= TREND_WINDOW]
+                slope = 0.0
+                if len(history) >= 4:   # least-squares slope, C per second
+                    n = len(history); mx = sum(h[0] for h in history) / n; my = sum(h[1] for h in history) / n
+                    den = sum((h[0] - mx) ** 2 for h in history)
+                    slope = sum((h[0] - mx) * (h[1] - my) for h in history) / den if den else 0.0
+                pred = smooth + max(0.0, slope) * HORIZON
             try:
                 if t is None or (t >= EMERGENCY) or (emergency and t >= EMERGENCY_CLEAR):
                     emergency = t is None or t >= EMERGENCY_CLEAR
                     fans.release(); mode = "apple (safety)" if p != "apple" else "apple"
-                    spinning = True
+                    spinning, speed, full = True, 1.0, False
                 elif p == "apple":
                     emergency = False
-                    fans.release(); spinning = True
-                else:
+                    fans.release(); spinning, speed, full = True, 0.0, False
+                elif p == "max":
                     emergency = False
                     for i in fans.ids:
-                        lo, hi = fans.limits(i)
-                        if p == "max":
-                            want = hi
+                        fans.set(i, fans.limits(i)[1])
+                    spinning, speed, full = True, 1.0, False
+                else:
+                    emergency = False
+                    k = TUNING[p]
+                    if not spinning:
+                        if smooth >= k["start"] and pred >= k["hold"] - 10.0:
+                            spinning, speed, cool_since = True, 0.0, None
+                    else:
+                        if smooth < k["stop"]:
+                            cool_since = cool_since or now
+                            if now - cool_since >= STOP_AFTER:
+                                spinning, speed, full = False, 0.0, False
                         else:
-                            start, stop_t, full = CURVES[p]
-                            if spinning and t < stop_t:
-                                spinning = False
-                            elif not spinning and t >= start:
-                                spinning = True
-                            if not spinning:
-                                want = 1 if can_stop else lo        # 1 = "below minimum" = stop
-                            else:
-                                frac = max(0.0, min(1.0, (t - start) / (full - start)))
-                                want = lo + (hi - lo) * frac * frac  # gentle at first, like macOS
-                        # ramp: up quickly, down by at most 300 rpm per cycle
-                        prev = current.get(i, want)
-                        if want > 1 and prev > 1 and want < prev:
-                            want = max(want, prev - 300)
-                        current[i] = want
+                            cool_since = None
+                    if spinning:
+                        err = pred - k["hold"]
+                        speed += (k["up"] if err > 0 else k["down"]) * err
+                        speed = max(0.0, min(1.0, speed))
+                        if t >= MAX_AT and slope > 0 and speed >= MAX_FROM:
+                            full = True
+                        elif full and smooth < MAX_RELEASE:
+                            full = False
+                    mode = p + (" (full)" if full else "" if spinning else " (silent)")
+                    for i in fans.ids:
+                        lo, hi = fans.limits(i)
+                        if not spinning:
+                            want = 1 if can_stop else lo        # 1 = below minimum = stop
+                        else:
+                            want = hi if full else lo + (hi - lo) * speed
                         fans.set(i, round(want))
             except OSError as e:
                 print(f"fan write failed ({e}); handing the fans to the SMC", file=sys.stderr)
                 fans.release(); mode = "apple (error)"
             try:
-                write_state({"profile": p, "mode": mode, "die": t,
+                write_state({"profile": p, "mode": mode, "die": t, "smooth": smooth, "predicted": pred,
+                             "speed": round(speed, 3), "full": full,
                              "fans": [{"id": i, "rpm": fans.rpm(i), "target": fans.last.get(i, 0)} for i in fans.ids],
                              "canStop": can_stop, "time": time.time()})
             except OSError:
