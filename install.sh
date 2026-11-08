@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kde-macos-parity installer. Idempotent; backs up anything it changes to ~/kde-pre-mac-backup.
+# Fenwyre installer. Idempotent; backs up anything it changes to ~/kde-pre-mac-backup.
 #
 #   ./install.sh features            list the features (id|group|title|description|sudo)  <- agents read this
 #   ./install.sh plan ID... | all    show which units would run and whether sudo is needed (changes nothing)

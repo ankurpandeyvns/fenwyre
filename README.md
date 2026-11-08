@@ -1,17 +1,19 @@
-# Kupertino
+# Fenwyre
+
+<sub>/ˈfɛn.waɪər/ · *fen*: open, untamed land</sub>
 
 **macOS feel, Linux freedom.** A KDE Plasma 6 setup that gets as close to macOS as Linux allows, down to
 the menu bar, Spotlight, Control Center, the lock screen and the little things like Cmd+Shift+4.
 
 <p align="center">
-  <img src="docs/images/after.jpg" alt="Kupertino on KDE Plasma 6: macOS-style menu bar, glass windows, dock and the Macintosh live wallpaper" width="100%">
+  <img src="docs/images/after.jpg" alt="Fenwyre on KDE Plasma 6: macOS-style menu bar, glass windows, dock and the Macintosh live wallpaper" width="100%">
 </p>
 
 ## Before and after
 
-| Stock KDE Plasma 6 | Kupertino |
+| Stock KDE Plasma 6 | Fenwyre |
 |---|---|
-| <img src="docs/images/before-stock-plasma.jpg" alt="Stock KDE Plasma 6.4 desktop with Breeze Dark"> | <img src="docs/images/after.jpg" alt="The same Plasma with Kupertino applied"> |
+| <img src="docs/images/before-stock-plasma.jpg" alt="Stock KDE Plasma 6.4 desktop with Breeze Dark"> | <img src="docs/images/after.jpg" alt="The same Plasma with Fenwyre applied"> |
 
 <sub>Before: "KDE Plasma 6.4.5 Dark" by Michio.kawaii,
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:KDE_Plasma_6.4.5_Dark.png), GPL.</sub>
@@ -40,7 +42,7 @@ battery limit) are Apple silicon specific.
 
 ## Omarchy users: install KDE Plasma first
 
-Omarchy ships Hyprland. Kupertino is a **KDE Plasma 6 (Wayland)** setup, so Plasma has to be installed and
+Omarchy ships Hyprland. Fenwyre is a **KDE Plasma 6 (Wayland)** setup, so Plasma has to be installed and
 running before you apply anything:
 
 ```bash
@@ -103,6 +105,10 @@ Reboot into Plasma, then come back here. Notes from doing this on Omarchy:
   KRunner's engine (Milou).
 
 ## Install
+
+```bash
+git clone https://github.com/ankurpandeyvns/fenwyre.git && cd fenwyre
+```
 
 Pick what you want; nothing is all-or-nothing. Everything is user-level except a few small root services,
 it's idempotent, and it backs up what it touches to `~/kde-pre-mac-backup/`.
