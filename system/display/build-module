@@ -11,6 +11,12 @@
 #  - DDC/CI: one I2C adapter per external DCP ("apple-dcp DDC ..."), carried over the DCP
 #    firmware's I2C calls (the ones macOS's IOAVServiceReadI2C/WriteI2C use), so ddcutil and
 #    PowerDevil can set monitor brightness. appledrm.ddc=0 turns it off, also at runtime.
+#  - XDR (opt-in, appledrm.xdr_nits=N, N <= 1000): the mini-LED panel's backlight goes above
+#    its 500-nit SDR maximum. The swap's level is a binary64 in nits and the firmware takes a
+#    backlight nits cap (BLNitsCap) beside it; both are raised. DCP 13.5 firmware only.
+#  - HDR10 (opt-in, appledrm.hdr=1): connectors get Colorspace and HDR_OUTPUT_METADATA. On an
+#    external display PQ metadata selects its PQ BT.2020 colour mode; the mini-LED panel gets an
+#    EDID with PQ and BT.2020 up to its backlight maximum. Either way the planes are tagged PQ.
 #
 # Source: the exact linux-aurora commit the installed package was built from, read from the
 # Omarchy PKGBUILD history (omacom/omarchy-pkgs), or AURORA_COMMIT=<sha>. The build uses the
@@ -67,7 +73,7 @@ strip=${tools}llvm-strip nm=${tools}llvm-nm
 nmx() { "$nm" "$1" 2>/dev/null | awk '/ __ksymtab_/ {print $3}' | sort; }
 command -v "$nm" >/dev/null && { diff <(nmx "$stock") <(nmx "$work/appledrm.ko") >/dev/null || { echo "exported symbols differ from the packaged module"; exit 1; }; }
 [ -z "$(comm -23 <(modinfo -F parm "$stock" | sort) <(modinfo -F parm "$work/appledrm.ko" | sort))" ] || { echo "module parameters of the packaged module are missing"; exit 1; }
-for m in "still attached after system sleep" "apple-dcp DDC"; do
+for m in "still attached after system sleep" "apple-dcp DDC" "XDR: backlight up to" "no PQ BT.2020 colour mode"; do
     grep -aq "$m" "$work/appledrm.ko" || { echo "patch missing from the build ($m)"; exit 1; }
 done
 

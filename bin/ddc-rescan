@@ -1,0 +1,20 @@
+#!/bin/bash
+# After login: if PowerDevil (KDE brightness) missed an external monitor that has DDC/CI, restart it once.
+# PowerDevil's libddcutil scans once at start; a monitor whose link (e.g. HDMI through the Mac's DP->HDMI
+# converter) comes up later is never picked up, and its brightness control shows as unsupported.
+SB=org.kde.ScreenBrightness
+known() {  # external displays PowerDevil manages
+  local n=0 d
+  for d in $(qdbus6 $SB 2>/dev/null | grep '^/org/kde/ScreenBrightness/display'); do
+    [ "$(qdbus6 $SB "$d" org.kde.ScreenBrightness.Display.IsInternal 2>/dev/null)" = false ] && n=$((n + 1))
+  done
+  echo $n
+}
+sleep 20                                       # let the monitors' links and DDC come up
+want=$(timeout 60 ddcutil detect --brief 2>/dev/null | grep -c '^Display [0-9]')
+have=$(known)
+logger -t ddc-rescan "monitors with DDC/CI: $want, managed by PowerDevil: $have"
+[ "$have" -lt "$want" ] || exit 0
+systemctl --user restart plasma-powerdevil.service
+sleep 8
+logger -t ddc-rescan "restarted PowerDevil: now manages $(known) of $want"

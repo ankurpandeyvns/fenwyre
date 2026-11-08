@@ -66,8 +66,27 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 
 - **themes**: then `plasma-apply-lookandfeel -a net.local.macos.dark` (or light, ask). Verify
   `~/.config/kdedefaults/kdeglobals` shows `ColorScheme=WhiteSurDark` (global-theme values land there).
-  **Glass**: `plasma-sync-glass` sets the WhiteSur panel and dialog tint to one value per theme (both variants use
-  white text, so black 45%; the solid bar 35%). Screenshot the bar and an open popup over the same wallpaper.
+  **Glass** (macOS 27 Liquid Glass): `system/glass/build-effect` builds the KWin Glass effect (kwin-effects-glass,
+  replaces the stock blur; rerun after a KWin update) and `unit_glass` writes its settings to `[Effect-blurplus]` in
+  kwinrc (not `Effect-glass`). Blacklist mode with an empty list (`BlurNonMatching=true`; whitelist mode with an empty
+  list blurs nothing) and `BlurDocks=false` (otherwise the menu bars are force-blurred and warped by the refraction).
+  Popups of the opaque menu bars would get Plasma's solid, unblurred background (`CompactApplet.qml`); `plasma-sync-glass`
+  keeps a patched copy of the desktop shell package in `~/.local/share/plasma/shells/` (re-mirrored at each login,
+  removed if the patched line changes upstream). Verify by opening Mac Stats and Control Center: text behind is blurred.
+  Control Center doesn't use Plasma's popup: like Spotlight it opens a layer-shell overlay on its menu bar's screen
+  (`LayerShell.Window.screen` = the PanelView's `screenToFollow`; QML screen objects aren't QScreens) with a floating
+  glass card 6 px under the bar, corners concentric with the 18 px tiles (radius 30), hairline rim; outside click or
+  Esc closes. PlasmaCore.Dialog can't host it (clears the blur on every show/resize/move). `plasma-sync-glass` sets the WhiteSur tints: dock black 18% with a
+  white 22% hairline instead of the black outline, popups 38%, solid menu bar 12%. Docks must be "translucent", not
+  "adaptive" (adaptive swaps in the solid #333 SVG under maximized windows). Verify: `qdbus6 org.kde.KWin /Effects
+  org.kde.kwin.Effects.isEffectLoaded glass` is true, then reveal a dock (`panel.hiding="none"`, back to "autohide"),
+  screenshot it over a patterned wallpaper: background visible, lines bend only at the rounded edge.
+  **Genie** (`themesettings`): `system/genie/build-effect` installs `macgenie` (KWin's Magic Lamp; stock KWin sends a
+  window to whichever dock's center is nearest, and with several docks a second window of a grouped app has no icon
+  rect at all, so it flies to the mouse). A rebuilt plugin only loads after the next login (KWin keeps it mapped).
+  Verify: open a second Konsole window, move it near the right edge of a screen, set `[Effect-genie]
+  AnimationDuration=2500`, show that screen's dock, minimize it from a KWin script, screenshot ~1.5 s later: the funnel
+  ends in the Konsole icon on that screen's dock. Set 450 back.
 - **menubar**: needs a top panel (launcher, app menu, spacer, system tray, clock) and an auto-hiding bottom dock on
   each screen. Set `panelOpacity=1` per top panel in `~/.config/plasmashellrc` (`[PlasmaViews][Panel N]`) while
   plasmashell is stopped. `addWidget` appends; to put Mac Stats, battery, Sound, Control Center (and Spotlight) left
@@ -102,7 +121,8 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   Display driver (Asahi, `appledrm` unit, next boot): `modinfo -n appledrm` is under `updates/`; the kernel log has
   `DDC: i2c-N` for each external DCP; `ddcutil detect` lists the external monitors and `ddcutil -b N getvcp 10`
   reads brightness (first try only `getvcp`; `setvcp` after that works). Brightness keys on an external then log
-  `DDC level N` (`journalctl --user -t brightness-here`); `ddcutil -b N getvcp 10 12` follows `bin/ddc-level`'s curve. After `systemctl suspend` and wake with the
+  `DP-3 up: 3500 -> 4000/10000` (`journalctl --user -t brightness-here`) and `ddcutil -b N getvcp 10` follows it: one level
+  per display in KDE's ScreenBrightness service (KWin drives DDC/CI), the same one the tray slider shows. After `systemctl suspend` and wake with the
   HDMI cable plugged in, the log shows `DP2HDMI: display still attached after system sleep, reconnecting` and the
   display comes back. If DDC misbehaves: `echo 0 | sudo tee /sys/module/appledrm/parameters/ddc`. After a kernel
   update, rerun `system/display/build-module` (it finds the kernel's linux-aurora commit by itself).

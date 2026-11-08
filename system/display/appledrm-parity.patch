@@ -1,7 +1,7 @@
-diff --git i/drivers/gpu/drm/apple/Makefile w/drivers/gpu/drm/apple/Makefile
+diff --git a/drivers/gpu/drm/apple/Makefile b/drivers/gpu/drm/apple/Makefile
 index 98c95bf..3c04d07 100644
---- i/drivers/gpu/drm/apple/Makefile
-+++ w/drivers/gpu/drm/apple/Makefile
+--- a/drivers/gpu/drm/apple/Makefile
++++ b/drivers/gpu/drm/apple/Makefile
 @@ -5,6 +5,7 @@ CFLAGS_trace.o = -I$(src)
  appledrm-y := apple_drv.o apple_resume.o
  appledrm-y += afk.o dcp.o dcp-fabric.o dcp_backlight.o dptxep.o iomfb.o parser.o systemep.o
@@ -10,10 +10,95 @@ index 98c95bf..3c04d07 100644
  appledrm-$(CONFIG_DRM_APPLE_AUDIO) += audio.o
  appledrm-$(CONFIG_DRM_APPLE_AUDIO) += av.o
  appledrm-y += connector.o dcp-display-metadata.o dcp-180hz.o dcp-panel-edid.o
-diff --git i/drivers/gpu/drm/apple/dcp-fabric.c w/drivers/gpu/drm/apple/dcp-fabric.c
+diff --git a/drivers/gpu/drm/apple/apple_drv.c b/drivers/gpu/drm/apple/apple_drv.c
+index 2324a8a..e900b8d 100644
+--- a/drivers/gpu/drm/apple/apple_drv.c
++++ b/drivers/gpu/drm/apple/apple_drv.c
+@@ -553,10 +553,59 @@ apple_connector_atomic_best_encoder(struct drm_connector *conn,
+ 	return NULL;
+ }
+ 
++/*
++ * appledrm.hdr: switching between SDR and HDR10 changes the output's colour
++ * mode, so a change of the HDR metadata or the colorspace is a modeset.
++ */
++static int apple_connector_atomic_check(struct drm_connector *conn,
++					struct drm_atomic_commit *state)
++{
++	struct drm_connector_state *old = drm_atomic_get_old_connector_state(state, conn);
++	struct drm_connector_state *new = drm_atomic_get_new_connector_state(state, conn);
++	struct drm_crtc_state *crtc_state;
++
++	/* The built-in panel keeps its mode: only its planes change (dcp_panel_hdr()). */
++	if (!appledrm_hdr || !new->crtc || conn->connector_type == DRM_MODE_CONNECTOR_eDP)
++		return 0;
++	if (old->colorspace == new->colorspace &&
++	    drm_connector_atomic_hdr_metadata_equal(old, new))
++		return 0;
++	crtc_state = drm_atomic_get_crtc_state(state, new->crtc);
++	if (IS_ERR(crtc_state))
++		return PTR_ERR(crtc_state);
++	crtc_state->mode_changed = true;
++	return 0;
++}
++
++/*
++ * HDR10 needs the Colorspace and HDR_OUTPUT_METADATA properties. A built-in
++ * panel only offers HDR when its EDID says so (dcp_panel_hdr()).
++ */
++static int apple_connector_attach_hdr(struct drm_connector *connector, int type)
++{
++	const u32 bt2020 = BIT(DRM_MODE_COLORIMETRY_BT2020_RGB) |
++			   BIT(DRM_MODE_COLORIMETRY_BT2020_YCC);
++	int ret;
++
++	if (!appledrm_hdr)
++		return 0;
++	if (type == DRM_MODE_CONNECTOR_HDMIA)
++		ret = drm_mode_create_hdmi_colorspace_property(connector, bt2020);
++	else
++		ret = drm_mode_create_dp_colorspace_property(connector, bt2020);
++	if (!ret)
++		ret = drm_connector_attach_colorspace_property(connector);
++	if (ret)
++		return ret;
++	drm_connector_attach_hdr_output_metadata_property(connector);
++	return 0;
++}
++
+ static const struct drm_connector_helper_funcs apple_connector_helper_funcs = {
+ 	.get_modes		= dcp_get_modes,
+ 	.mode_valid		= dcp_mode_valid,
+ 	.atomic_best_encoder	= apple_connector_atomic_best_encoder,
++	.atomic_check		= apple_connector_atomic_check,
+ };
+ 
+ static const struct drm_crtc_helper_funcs apple_crtc_helper_funcs = {
+@@ -596,6 +645,9 @@ static int apple_connector_create(struct drm_device *drm,
+ 	if (ret)
+ 		goto err_free;
+ 	ret = drm_connector_attach_vrr_capable_property(&connector->base);
++	if (ret)
++		goto err_cleanup;
++	ret = apple_connector_attach_hdr(&connector->base, connector_type);
+ 	if (ret)
+ 		goto err_cleanup;
+ 
+@@ -796,6 +848,10 @@ static int apple_probe_typec_ports(struct drm_device *drm,
+ 		ret = drm_connector_attach_vrr_capable_property(&connector->base);
+ 		if (ret)
+ 			return ret;
++		ret = apple_connector_attach_hdr(&connector->base,
++						 DRM_MODE_CONNECTOR_DisplayPort);
++		if (ret)
++			return ret;
+ 
+ 		connector->base.polled = DRM_CONNECTOR_POLL_HPD;
+ 		connector->connected = false;
+diff --git a/drivers/gpu/drm/apple/dcp-fabric.c b/drivers/gpu/drm/apple/dcp-fabric.c
 index 29321f8..aff27a4 100644
---- i/drivers/gpu/drm/apple/dcp-fabric.c
-+++ w/drivers/gpu/drm/apple/dcp-fabric.c
+--- a/drivers/gpu/drm/apple/dcp-fabric.c
++++ b/drivers/gpu/drm/apple/dcp-fabric.c
 @@ -759,14 +759,52 @@ static void dcp_hdmi_recheck_work(struct work_struct *work)
  	mod_delayed_work(system_freezable_wq, &dcp->hdmi_recheck_wq, 0);
  }
@@ -67,10 +152,10 @@ index 29321f8..aff27a4 100644
  }
  
  /* Caller enables the HPD IRQ first; a later edge invalidates this sample. */
-diff --git i/drivers/gpu/drm/apple/dcp-fabric.h w/drivers/gpu/drm/apple/dcp-fabric.h
+diff --git a/drivers/gpu/drm/apple/dcp-fabric.h b/drivers/gpu/drm/apple/dcp-fabric.h
 index 1176ef5..deba6c4 100644
---- i/drivers/gpu/drm/apple/dcp-fabric.h
-+++ w/drivers/gpu/drm/apple/dcp-fabric.h
+--- a/drivers/gpu/drm/apple/dcp-fabric.h
++++ b/drivers/gpu/drm/apple/dcp-fabric.h
 @@ -108,6 +108,7 @@ void dcp_typec_routes_disable(struct apple_dcp *dcp);
  void dcp_typec_retrain_work(struct work_struct *work);
  void dcp_fabric_init(struct apple_dcp *dcp);
@@ -79,11 +164,31 @@ index 1176ef5..deba6c4 100644
  void dcp_fabric_hdmi_reinit(struct apple_dcp *dcp, const char *why);
  void dcp_fabric_hdmi_retry(struct apple_dcp *dcp);
  irqreturn_t dcp_dp2hdmi_hpd_edge(int irq, void *data);
-diff --git i/drivers/gpu/drm/apple/dcp-internal.h w/drivers/gpu/drm/apple/dcp-internal.h
-index 0db9ff6..285b81b 100644
---- i/drivers/gpu/drm/apple/dcp-internal.h
-+++ w/drivers/gpu/drm/apple/dcp-internal.h
-@@ -641,8 +641,12 @@ struct apple_dcp {
+diff --git a/drivers/gpu/drm/apple/dcp-internal.h b/drivers/gpu/drm/apple/dcp-internal.h
+index 0db9ff6..5bf5de8 100644
+--- a/drivers/gpu/drm/apple/dcp-internal.h
++++ b/drivers/gpu/drm/apple/dcp-internal.h
+@@ -413,6 +413,8 @@ struct apple_dcp {
+ 	/* The driver holds the sink HPD low itself; hpd_mutex. */
+ 	bool typec_hpd_held;
+ 	bool use_timestamps;
++	/* The output runs a PQ BT.2020 colour mode (appledrm.hdr). */
++	bool hdr10;
+ 	bool vrr_enabled;
+ 	struct dcp_set_digital_out_mode_req mode;
+ 
+@@ -489,6 +491,10 @@ struct apple_dcp {
+ 	struct completion systemep_done;
+ 
+ 	struct apple_dcp_afkep *ibootep;
++	/* disp0-service on the internal panel's DCP (appledrm.disp0_props) */
++	struct apple_epic_service *disp0_service;
++	u64 disp0_last_get;
++	u32 disp0_last_retcode;
+ 	struct apple_dcp_afkep *dcpavservep;
+ 	struct dcpavserv dcpavserv;
+ 
+@@ -641,8 +647,12 @@ struct apple_dcp {
  	bool hdmi_edge_seen;
  	struct delayed_work hdmi_settle_wq;
  	struct delayed_work hdmi_recheck_wq;
@@ -96,10 +201,133 @@ index 0db9ff6..285b81b 100644
  };
  
  void dcp_firmware_metadata_connection(struct apple_dcp *dcp, u64 generation, bool connected);
-diff --git i/drivers/gpu/drm/apple/dcp.c w/drivers/gpu/drm/apple/dcp.c
-index 8c0c29b..13b8b09 100644
---- i/drivers/gpu/drm/apple/dcp.c
-+++ w/drivers/gpu/drm/apple/dcp.c
+@@ -714,6 +724,12 @@ void dcp_backlight_stop(struct apple_dcp *dcp);
+ void dcp_backlight_finish_fade(struct apple_dcp *dcp);
+ int dcp_backlight_register(struct apple_dcp *dcp);
+ int dcp_backlight_update(struct apple_dcp *dcp);
++u32 dcp_backlight_xdr_nits(struct apple_dcp *dcp);
++u32 dcp_backlight_max_nits(struct apple_dcp *dcp);
++bool dcp_panel_hdr(struct apple_dcp *dcp);
++void dcp_backlight_fill_edr(struct apple_dcp *dcp, u8 *bl);
++bool dcp_backlight_layer_edr(struct apple_dcp *dcp, u32 *num, u32 *denom);
++u64 dcp_nits_binary64(u32 nits);
+ s32 dcp_ext_backlight_value(struct apple_dcp *dcp);
+ bool dcp_has_panel(struct apple_dcp *dcp);
+ 
+diff --git a/drivers/gpu/drm/apple/dcp-panel-edid.c b/drivers/gpu/drm/apple/dcp-panel-edid.c
+index 97eee16..6ebfc8d 100644
+--- a/drivers/gpu/drm/apple/dcp-panel-edid.c
++++ b/drivers/gpu/drm/apple/dcp-panel-edid.c
+@@ -25,6 +25,7 @@
+ 
+ #include <linux/ctype.h>
+ #include <linux/errno.h>
++#include <linux/int_log.h>
+ #include <linux/kernel.h>
+ #include <linux/minmax.h>
+ #include <linux/slab.h>
+@@ -52,6 +53,8 @@ static const struct {
+ 	u16 year;
+ 	struct dcp_panel_timing timing;
+ } dcp_panel_models[] = {
++	/* MacBook Pro (16-inch, 2021, M1 Pro or M1 Max): the same 3456x2234 120 Hz timing */
++	{ "J316", 2021, { 1042130, 3456, 3464, 3496, 3536, 2234, 2352, 2360, 2456 } },
+ 	/* MacBook Pro (16-inch, M3 Pro or M3 Max): 3456x2234 at 120 Hz */
+ 	{ "J516", 2023, { 1042130, 3456, 3464, 3496, 3536, 2234, 2352, 2360, 2456 } },
+ };
+@@ -327,6 +330,76 @@ int dcp_panel_edid_build(const struct dcp_panel_id *id, int width_mm, int height
+ 	return 0;
+ }
+ 
++/* CTA-861 luminance code for @nits: 50 * 2^(code / 32) cd/m2. */
++static u8 cta_max_luminance(u32 nits)
++{
++	if (nits <= 50)
++		return 0;
++	return min_t(u64, 255, ((u64)(intlog2(nits) - intlog2(50)) * 32) >> 24);
++}
++
++/*
++ * A CTA-861 extension for appledrm.hdr: BT.2020 RGB colorimetry and HDR
++ * static metadata (SDR and SMPTE ST 2084 EOTFs, static metadata type 1),
++ * peak and frame-average luminance @nits, the minimum about 0.005 cd/m2.
++ */
++static void cta_hdr_block(u8 *ext, u32 nits)
++{
++	u8 *b = ext + 4;
++
++	memset(ext, 0, EDID_LENGTH);
++	ext[0] = CEA_EXT;
++	ext[1] = 3;
++	ext[3] = BIT(7);	/* IT formats underscanned: the panel shows every pixel */
++	/* Colorimetry data block: extended tag 5, BT2020_RGB. */
++	b[0] = 7 << 5 | 3;
++	b[1] = 0x05;
++	b[2] = BIT(7);
++	b[3] = 0;
++	b += 4;
++	/* HDR static metadata data block: extended tag 6. */
++	b[0] = 7 << 5 | 6;
++	b[1] = 0x06;
++	b[2] = BIT(0) | BIT(2);
++	b[3] = BIT(0);
++	b[4] = cta_max_luminance(nits);
++	b[5] = cta_max_luminance(nits);
++	/* min = max * (code / 255)^2 / 100: code 5 is about 0.004-0.006 cd/m2. */
++	b[6] = 5;
++	b += 7;
++	ext[2] = b - ext;	/* no detailed timings */
++	checksum(ext, EDID_LENGTH);
++}
++
++/* The panel EDID with an HDR10 CTA-861 extension, for a panel lit up to @nits. */
++int dcp_panel_edid_update_hdr(struct drm_connector *connector, const struct dcp_panel_id *id,
++			      int width_mm, int height_mm, u32 nits)
++{
++	const struct drm_edid *edid;
++	u8 *blocks;
++	int ret;
++
++	blocks = kmalloc((DCP_PANEL_EDID_BLOCKS + 1) * EDID_LENGTH, GFP_KERNEL);
++	if (!blocks)
++		return -ENOMEM;
++	ret = dcp_panel_edid_build(id, width_mm, height_mm, blocks);
++	if (ret)
++		goto out;
++	blocks[0x7e] = DCP_PANEL_EDID_BLOCKS;
++	checksum(blocks, EDID_LENGTH);
++	cta_hdr_block(blocks + DCP_PANEL_EDID_BLOCKS * EDID_LENGTH, nits);
++	edid = drm_edid_alloc(blocks, (DCP_PANEL_EDID_BLOCKS + 1) * EDID_LENGTH);
++	if (!edid) {
++		ret = -ENOMEM;
++		goto out;
++	}
++	ret = drm_edid_connector_update(connector, edid);
++	drm_edid_free(edid);
++out:
++	kfree(blocks);
++	return ret;
++}
++
+ int dcp_panel_edid_update(struct drm_connector *connector, const struct dcp_panel_id *id,
+ 			  int width_mm, int height_mm)
+ {
+diff --git a/drivers/gpu/drm/apple/dcp-panel-edid.h b/drivers/gpu/drm/apple/dcp-panel-edid.h
+index 1e9a624..51771c1 100644
+--- a/drivers/gpu/drm/apple/dcp-panel-edid.h
++++ b/drivers/gpu/drm/apple/dcp-panel-edid.h
+@@ -33,5 +33,7 @@ int dcp_panel_edid_build(const struct dcp_panel_id *id, int width_mm, int height
+ 			 u8 edid[DCP_PANEL_EDID_BLOCKS * 128]);
+ int dcp_panel_edid_update(struct drm_connector *connector, const struct dcp_panel_id *id,
+ 			  int width_mm, int height_mm);
++int dcp_panel_edid_update_hdr(struct drm_connector *connector, const struct dcp_panel_id *id,
++			      int width_mm, int height_mm, u32 nits);
+ 
+ #endif
+diff --git a/drivers/gpu/drm/apple/dcp.c b/drivers/gpu/drm/apple/dcp.c
+index 8c0c29b..d125e13 100644
+--- a/drivers/gpu/drm/apple/dcp.c
++++ b/drivers/gpu/drm/apple/dcp.c
 @@ -49,6 +49,7 @@
  #include "dcp-fabric-effects.h"
  #include "dcp-fabric.h"
@@ -108,7 +336,43 @@ index 8c0c29b..13b8b09 100644
  #include "dcpext_scanout.h"
  #include "dcp-internal.h"
  #include "dcp-external-bw.h"
-@@ -3561,6 +3562,7 @@ VISIBLE_IF_KUNIT void dcp_disable_typec_work(struct apple_dcp *dcp, bool release
+@@ -204,6 +205,20 @@ bool hdmi_audio = true;
+ module_param(hdmi_audio, bool, 0644);
+ MODULE_PARM_DESC(hdmi_audio, "Enable DP/HDMI audio support (default: on)");
+ 
++bool appledrm_hdr;
++module_param_named(hdr, appledrm_hdr, bool, 0444);
++
++/*
++ * kde-macos-parity: open the disp0-service EPIC channel on the internal
++ * panel's DCP too. macOS's IOMobileFramebuffer user client reaches
++ * UnifiedPipeline::applyProperty() through it (AppleDCPDisplayServiceEPIC,
++ * selector 11); see ibootep.c. Experimental, so off by default.
++ */
++bool appledrm_disp0_props;
++module_param_named(disp0_props, appledrm_disp0_props, bool, 0444);
++MODULE_PARM_DESC(disp0_props, "Open disp0-service on the internal DCP for applyProperty (experimental)");
++MODULE_PARM_DESC(hdr, "HDR10 output on external displays that offer it (default: off)");
++
+ static bool unstable_edid = true;
+ module_param(unstable_edid, bool, 0644);
+ MODULE_PARM_DESC(unstable_edid, "Enable unstable EDID retrival support");
+@@ -2470,6 +2485,14 @@ int dcp_start(struct platform_device *pdev)
+ 				 ret);
+ 	}
+ 
++	if (!dcp->phy && appledrm_disp0_props && dcp_has_panel(dcp) &&
++	    dcp->fw_compat == DCP_FIRMWARE_V_13_5 &&
++	    apple_rtkit_has_endpoint(dcp->rtk, DISP0_ENDPOINT)) {
++		ret = ibootep_init(dcp);
++		if (ret)
++			dev_warn(dcp->dev, "Failed to start disp0 endpoint: %d\n", ret);
++	}
++
+ 	if (dcp->phy && dcp->fw_compat >= DCP_FIRMWARE_V_13_5) {
+ 		ret = ibootep_init(dcp);
+ 		if (ret)
+@@ -3561,6 +3584,7 @@ VISIBLE_IF_KUNIT void dcp_disable_typec_work(struct apple_dcp *dcp, bool release
  	cancel_delayed_work_sync(&dcp->external_stop_retry_wq);
  	disable_delayed_work_sync(&dcp->hdmi_settle_wq);
  	disable_delayed_work_sync(&dcp->hdmi_recheck_wq);
@@ -116,7 +380,7 @@ index 8c0c29b..13b8b09 100644
  	dcp_hdmi_disable(dcp);
  }
  
-@@ -3574,6 +3576,7 @@ VISIBLE_IF_KUNIT void dcp_enable_typec_work(struct apple_dcp *dcp)
+@@ -3574,6 +3598,7 @@ VISIBLE_IF_KUNIT void dcp_enable_typec_work(struct apple_dcp *dcp)
  	enable_delayed_work(&dcp->announce_wq);
  	enable_delayed_work(&dcp->hdmi_settle_wq);
  	enable_delayed_work(&dcp->hdmi_recheck_wq);
@@ -124,7 +388,16 @@ index 8c0c29b..13b8b09 100644
  	dcp_hdmi_enable(dcp);
  	scoped_guard(mutex, &dcp->hpd_mutex)
  		dcp->typec_work_enabled = true;
-@@ -4664,8 +4667,12 @@ static int dcp_platform_probe(struct platform_device *pdev)
+@@ -3801,7 +3826,7 @@ static int dcp_comp_bind_pipe(struct device *dev, struct device *main, void *dat
+ 						  &compatible))
+ 			compatible = NULL;
+ 		/* The most specific compatible names the panel for its EDID. */
+-		if (iomfb_v14_7_base_edid(dcp) && compatible &&
++		if ((iomfb_v14_7_base_edid(dcp) || dcp_panel_hdr(dcp)) && compatible &&
+ 		    dcp_panel_id_from_compatible(&dcp->panel.id, compatible))
+ 			dev_dbg(dev, "no EDID make and product in '%s'\n", compatible);
+ 		/*
+@@ -4664,8 +4689,12 @@ static int dcp_platform_probe(struct platform_device *pdev)
  	void *group;
  	int ret;
  
@@ -139,7 +412,7 @@ index 8c0c29b..13b8b09 100644
  
  	ret = dcp_ext_route_suppliers(dev);
  	if (ret)
-@@ -4711,6 +4718,7 @@ static void dcp_platform_remove(struct platform_device *pdev)
+@@ -4711,6 +4740,7 @@ static void dcp_platform_remove(struct platform_device *pdev)
  {
  	struct apple_dcp *dcp = platform_get_drvdata(pdev);
  
@@ -147,7 +420,7 @@ index 8c0c29b..13b8b09 100644
  	if (dcp && dcp->external && !dcp->external_native) {
  		/* Enabled for the external start at probe. No component unbind. */
  		disable_delayed_work_sync(&dcp->typec_reconnect_wq);
-@@ -5015,6 +5023,9 @@ static int dcp_platform_resume(struct device *dev)
+@@ -5015,6 +5045,9 @@ static int dcp_platform_resume(struct device *dev)
  	/* Observe future edges before sampling any edges lost in sleep. */
  	if (dcp->hdmi_hpd_irq)
  		dcp_fabric_run_resume(&dcp_resume_ops, dcp);
@@ -157,10 +430,200 @@ index 8c0c29b..13b8b09 100644
  	if (dcp->external_native)
  		enable_work(&dcp->external_audio_work);
  
-diff --git i/drivers/gpu/drm/apple/dcp_external_announce_test.c w/drivers/gpu/drm/apple/dcp_external_announce_test.c
+diff --git a/drivers/gpu/drm/apple/dcp.h b/drivers/gpu/drm/apple/dcp.h
+index baff04e..cebe5e3 100644
+--- a/drivers/gpu/drm/apple/dcp.h
++++ b/drivers/gpu/drm/apple/dcp.h
+@@ -132,4 +132,8 @@ unsigned int apple_j613_25g83_clock_hz(void);
+ /* A J613, or a J615 whose boot loader carries the experimental opt-in. */
+ bool apple_t8122_25g83_board(void);
+ 
++/* appledrm.hdr: HDR10 output on external displays (dcp.c). */
++extern bool appledrm_hdr;
++extern bool appledrm_disp0_props;
++
+ #endif
+diff --git a/drivers/gpu/drm/apple/dcp_backlight.c b/drivers/gpu/drm/apple/dcp_backlight.c
+index 5d979aa..b07a1c0 100644
+--- a/drivers/gpu/drm/apple/dcp_backlight.c
++++ b/drivers/gpu/drm/apple/dcp_backlight.c
+@@ -9,6 +9,7 @@
+ 
+ #include <linux/backlight.h>
+ #include <linux/math64.h>
++#include <linux/unaligned.h>
+ #include <linux/completion.h>
+ #include <linux/delay.h>
+ #include "linux/jiffies.h"
+@@ -18,6 +19,20 @@
+ #include "dcp-internal.h"
+ #include "iomfb_v14_7.h"
+ 
++/*
++ * appledrm.xdr_nits: let the backlight of a mini-LED (XDR) panel go above its
++ * SDR maximum, up to this many nits. The swap's level is a binary64 in nits
++ * (the "DAC" tables below are its upper bytes) and the firmware also takes a
++ * backlight nits cap (BLNitsCap) next to it. 1000 nits is Apple's sustained
++ * full-screen rating for these panels; more is only a peak for small areas.
++ * DCP 13.5 only: that is the firmware these fields were read from.
++ */
++#define DCP_XDR_MAX_NITS	1000U
++static unsigned int xdr_nits;
++module_param(xdr_nits, uint, 0444);
++MODULE_PARM_DESC(xdr_nits,
++		 "Mini-LED (XDR) panel: maximum backlight in nits above the SDR maximum, at most 1000 (default: 0, off)");
++
+ #define MIN_BRIGHTNESS_PART1	2U
+ #define MAX_BRIGHTNESS_PART1	99U
+ #define MIN_BRIGHTNESS_PART2	103U
+@@ -101,6 +116,120 @@ static bool dcp_backlight_presents_nits(struct apple_dcp *dcp)
+ 	       iomfb_v14_7_panel_nits(dcp);
+ }
+ 
++/*
++ * EDR fields of the 13.5 swap, after the level and the nits cap, for finding
++ * how the firmware runs the mini-LED panel's EDR/HDR path. Runtime knobs in
++ * thousandths, 0 = the field is not sent (the stock behaviour):
++ *  edr_milli       third flag (bl_unk byte 2), binary64 at bl_unk + 21: the
++ *                  display's EDR factor; the firmware scales layers and the
++ *                  PQ table with it
++ *  edr_f4_milli    fourth flag (byte 3), binary64 at bl_unk + 29
++ *  edr_hdr_milli   fifth flag (byte 4), which turns on the firmware's PQ
++ *                  path, and the binary64 at bl_unk + 124 sent with it
++ *  layer_edr_milli each plane's ratio (unk_num / unk_denom) against the factor
++ */
++static unsigned int edr_milli, edr_f4_milli, edr_hdr_milli, layer_edr_milli;
++module_param(edr_milli, uint, 0644);
++MODULE_PARM_DESC(edr_milli, "Experimental: built-in panel EDR factor in 1/1000 (default: 0, not sent)");
++module_param(edr_f4_milli, uint, 0644);
++MODULE_PARM_DESC(edr_f4_milli, "Experimental: fourth swap brightness field in 1/1000 (default: 0, not sent)");
++module_param(edr_hdr_milli, uint, 0644);
++MODULE_PARM_DESC(edr_hdr_milli, "Experimental: fifth swap brightness field (PQ path) in 1/1000 (default: 0, not sent)");
++module_param(layer_edr_milli, uint, 0644);
++MODULE_PARM_DESC(layer_edr_milli, "Experimental: plane EDR ratio in 1/1000 (default: 0, not sent)");
++
++/* @milli / 1000 as IEEE 754 binary64, from 32.32 fixed point. */
++static u64 dcp_milli_binary64(u32 milli)
++{
++	u64 v = div_u64((u64)milli << 32, 1000);
++	int msb;
++
++	if (!v)
++		return 0;
++	msb = fls64(v) - 1;
++	v = msb > 52 ? v >> (msb - 52) : v << (52 - msb);
++	return ((u64)(1023 + msb - 32) << 52) | (v & GENMASK_ULL(51, 0));
++}
++
++static bool dcp_edr_knobs(struct apple_dcp *dcp)
++{
++	return dcp->panel.has_mini_led && dcp->fw_compat == DCP_FIRMWARE_V_13_5 &&
++	       !dcp_backlight_presents_nits(dcp);
++}
++
++/* @bl: the swap's bl_unk; the fields of the knobs above that are set. */
++void dcp_backlight_fill_edr(struct apple_dcp *dcp, u8 *bl)
++{
++	if (!dcp_edr_knobs(dcp))
++		return;
++	if (READ_ONCE(edr_milli)) {
++		bl[2] = 1;
++		put_unaligned_le64(dcp_milli_binary64(READ_ONCE(edr_milli)), bl + 21);
++	}
++	if (READ_ONCE(edr_f4_milli)) {
++		bl[3] = 1;
++		put_unaligned_le64(dcp_milli_binary64(READ_ONCE(edr_f4_milli)), bl + 29);
++	}
++	if (READ_ONCE(edr_hdr_milli)) {
++		bl[4] = 1;
++		put_unaligned_le64(dcp_milli_binary64(READ_ONCE(edr_hdr_milli)), bl + 124);
++	}
++}
++
++/* A plane's EDR ratio as num / denom, or false to leave the plane's zeros. */
++bool dcp_backlight_layer_edr(struct apple_dcp *dcp, u32 *num, u32 *denom)
++{
++	u32 milli = READ_ONCE(layer_edr_milli);
++
++	if (!milli || !dcp_edr_knobs(dcp))
++		return false;
++	*num = milli;
++	*denom = 1000;
++	return true;
++}
++
++/* The XDR ceiling in nits, or 0 when the panel runs at its SDR maximum. */
++u32 dcp_backlight_xdr_nits(struct apple_dcp *dcp)
++{
++	u32 nits = min(xdr_nits, DCP_XDR_MAX_NITS);
++
++	if (!dcp->panel.has_mini_led || dcp->fw_compat != DCP_FIRMWARE_V_13_5 ||
++	    !dcp->brightness.maximum || nits <= dcp->brightness.maximum ||
++	    dcp_backlight_presents_nits(dcp))
++		return 0;
++	return nits;
++}
++
++/*
++ * appledrm.hdr on a mini-LED panel: its EDID claims PQ and BT.2020 up to the
++ * backlight's maximum, and PQ BT.2020 planes are passed to the firmware as
++ * such, which maps them onto the panel (KWin runs the backlight at full in HDR).
++ */
++bool dcp_panel_hdr(struct apple_dcp *dcp)
++{
++	return appledrm_hdr && dcp->panel.has_mini_led &&
++	       dcp->fw_compat == DCP_FIRMWARE_V_13_5 && dcp->brightness.maximum &&
++	       !dcp_backlight_presents_nits(dcp);
++}
++
++/* The highest level the backlight takes, in nits. */
++u32 dcp_backlight_max_nits(struct apple_dcp *dcp)
++{
++	return dcp_backlight_xdr_nits(dcp) ?: dcp->brightness.maximum;
++}
++
++/* Integral nits as IEEE 754 binary64, without kernel floating point. */
++u64 dcp_nits_binary64(u32 nits)
++{
++	unsigned int bit;
++
++	if (!nits)
++		return 0;
++	bit = fls(nits) - 1;
++	return ((u64)(1023 + bit) << 52) |
++	       ((u64)(nits - (1U << bit)) << (52 - bit));
++}
++
+ bool dcp_backlight_active(struct apple_dcp *dcp)
+ {
+ 	return dcp_backlight_presents_nits(dcp) &&
+@@ -403,7 +532,8 @@ static u32 calculate_dac(struct apple_dcp *dcp, int val)
+ 	else if (val == MIN_BRIGHTNESS_PART2)
+ 		return 16 * brightness_part2[0];
+ 	else if (val >= MAX_BRIGHTNESS_PART2)
+-		return brightness_part2[ARRAY_SIZE(brightness_part2) - 1];
++		/* bl_value holds bytes 3-6 of the binary64; bl_power is byte 7 (0x40). */
++		return (u32)(dcp_nits_binary64(min_t(u32, val, dcp_backlight_max_nits(dcp))) >> 24);
+ 
+ 	if (val < MAX_BRIGHTNESS_PART1) {
+ 		dac = interpolate(val, MIN_BRIGHTNESS_PART1, MAX_BRIGHTNESS_PART1,
+@@ -585,7 +715,11 @@ int dcp_backlight_register(struct apple_dcp *dcp)
+ 		.brightness = dcp->brightness.nits,
+ 		.scale = BACKLIGHT_SCALE_LINEAR,
+ 	};
+-	props.max_brightness = min(dcp->brightness.maximum, MAX_BRIGHTNESS_PART2 - 1);
++	props.max_brightness = dcp_backlight_xdr_nits(dcp) ?:
++		min(dcp->brightness.maximum, MAX_BRIGHTNESS_PART2 - 1);
++	if (dcp_backlight_xdr_nits(dcp))
++		dev_info(dcp->dev, "XDR: backlight up to %u nits (SDR maximum %u)\n",
++			 props.max_brightness, dcp->brightness.maximum);
+ 	if (dcp_backlight_presents_nits(dcp) && !dcp_backlight_active(dcp))
+ 		return -ENODATA;
+ 	if (dcp_backlight_active(dcp)) {
+diff --git a/drivers/gpu/drm/apple/dcp_external_announce_test.c b/drivers/gpu/drm/apple/dcp_external_announce_test.c
 index bd0af84..58ccca6 100644
---- i/drivers/gpu/drm/apple/dcp_external_announce_test.c
-+++ w/drivers/gpu/drm/apple/dcp_external_announce_test.c
+--- a/drivers/gpu/drm/apple/dcp_external_announce_test.c
++++ b/drivers/gpu/drm/apple/dcp_external_announce_test.c
 @@ -111,6 +111,7 @@ static struct announce_test *announce_test_init(struct kunit *test)
  	INIT_DELAYED_WORK(&dcp->typec_relink_wq, announce_test_noop);
  	INIT_DELAYED_WORK(&dcp->hdmi_settle_wq, announce_test_noop);
@@ -169,11 +632,11 @@ index bd0af84..58ccca6 100644
  	INIT_DELAYED_WORK(&dcp->bl_fallback_wq, announce_test_noop);
  	INIT_DELAYED_WORK(&dcp->backlight.fade_work, announce_test_noop);
  	INIT_WORK(&dcp->external_stop_work, announce_test_noop);
-diff --git i/drivers/gpu/drm/apple/ddc.c w/drivers/gpu/drm/apple/ddc.c
+diff --git a/drivers/gpu/drm/apple/ddc.c b/drivers/gpu/drm/apple/ddc.c
 new file mode 100644
 index 0000000..71b4123
 --- /dev/null
-+++ w/drivers/gpu/drm/apple/ddc.c
++++ b/drivers/gpu/drm/apple/ddc.c
 @@ -0,0 +1,315 @@
 +// SPDX-License-Identifier: GPL-2.0-only OR MIT
 +/*
@@ -490,11 +953,11 @@ index 0000000..71b4123
 +	i2c_del_adapter(&ddc->adap);
 +	kfree(ddc);
 +}
-diff --git i/drivers/gpu/drm/apple/ddc.h w/drivers/gpu/drm/apple/ddc.h
+diff --git a/drivers/gpu/drm/apple/ddc.h b/drivers/gpu/drm/apple/ddc.h
 new file mode 100644
 index 0000000..f781b52
 --- /dev/null
-+++ w/drivers/gpu/drm/apple/ddc.h
++++ b/drivers/gpu/drm/apple/ddc.h
 @@ -0,0 +1,11 @@
 +/* SPDX-License-Identifier: GPL-2.0-only OR MIT */
 +/* kde-macos-parity: DDC/CI through the DCP firmware, see ddc.c */
@@ -507,10 +970,10 @@ index 0000000..f781b52
 +void dcp_ddc_unregister(struct apple_dcp *dcp);
 +
 +#endif
-diff --git i/drivers/gpu/drm/apple/epic/dpavservep.c w/drivers/gpu/drm/apple/epic/dpavservep.c
+diff --git a/drivers/gpu/drm/apple/epic/dpavservep.c b/drivers/gpu/drm/apple/epic/dpavservep.c
 index ed94c48..960fd4d 100644
---- i/drivers/gpu/drm/apple/epic/dpavservep.c
-+++ w/drivers/gpu/drm/apple/epic/dpavservep.c
+--- a/drivers/gpu/drm/apple/epic/dpavservep.c
++++ b/drivers/gpu/drm/apple/epic/dpavservep.c
 @@ -122,6 +122,7 @@ static void dcpavserv_init(struct apple_epic_service *service, const char *name,
  		dcp->dcpavserv.service = afk_service_get(service);
  		if (dcp->dcpavserv.service) {
@@ -519,10 +982,10 @@ index ed94c48..960fd4d 100644
  			dcp->dcpavserv.epoch++;
  			/* A new instance: the host is no client of it yet. */
  			dcp->dcpavserv.opened = NULL;
-diff --git i/drivers/gpu/drm/apple/epic/dpavservep.h w/drivers/gpu/drm/apple/epic/dpavservep.h
+diff --git a/drivers/gpu/drm/apple/epic/dpavservep.h b/drivers/gpu/drm/apple/epic/dpavservep.h
 index bf17629..c840fb1 100644
---- i/drivers/gpu/drm/apple/epic/dpavservep.h
-+++ w/drivers/gpu/drm/apple/epic/dpavservep.h
+--- a/drivers/gpu/drm/apple/epic/dpavservep.h
++++ b/drivers/gpu/drm/apple/epic/dpavservep.h
 @@ -23,6 +23,8 @@ struct dcpavserv {
  	struct completion enable_completion;
  	u32 unit;
@@ -532,3 +995,433 @@ index bf17629..c840fb1 100644
  	/*
  	 * The 14.7 external role's AV client, per instance: an instance is
  	 * named by the epoch it was published in, so a slot reused for its
+diff --git a/drivers/gpu/drm/apple/ibootep.c b/drivers/gpu/drm/apple/ibootep.c
+index 7f90f68..046497d 100644
+--- a/drivers/gpu/drm/apple/ibootep.c
++++ b/drivers/gpu/drm/apple/ibootep.c
+@@ -692,6 +692,154 @@ static void iboot_query_cancel(void *data)
+ 	cancel_work_sync(&query->work);
+ }
+ 
++/*
++ * kde-macos-parity: applyProperty on the internal panel's DCP.
++ *
++ * AppleDCPDisplayServiceEPIC (DCP firmware 13.5) dispatches disp0-service
++ * standard commands on the first word of the request, like the iBoot ops
++ * above: selector 11 calls UnifiedPipeline::applyProperty(property, value)
++ * (the handler reads them at payload +4 and +8) and needs a request of at
++ * least 0x20 bytes: the 16-byte header and a 16-byte payload. Property
++ * numbers are the firmware's iomfb_RuntimeProperty_* indices, e.g. 15
++ * brightnessLevel, 83 BLNitsCap, 106 supportHDR,
++ * 153 limit_max_physical_brightness.
++ */
++#define DISP0_OP_APPLY_PROPERTY 11
++
++int dcp_disp0_apply_property(struct apple_dcp *dcp, u32 property, u32 value,
++			     u32 *retcode)
++{
++	struct apple_epic_service *service = READ_ONCE(dcp->disp0_service);
++	u8 request[0x20] = {};
++	u8 *reply;
++	int ret;
++
++	if (!service || READ_ONCE(service->torndown))
++		return -ENODEV;
++	put_unaligned_le32(DISP0_OP_APPLY_PROPERTY, request);
++	put_unaligned_le32(sizeof(request), request + 4);
++	put_unaligned_le32(property, request + 16 + 4);
++	put_unaligned_le32(value, request + 16 + 8);
++	reply = kzalloc(IBOOT_QUERY_RX_SIZE, GFP_KERNEL);
++	if (!reply)
++		return -ENOMEM;
++	*retcode = 0;
++	ret = afk_send_command(service, EPIC_SUBTYPE_STD_SERVICE, request,
++			       sizeof(request), reply, IBOOT_QUERY_RX_SIZE, retcode);
++	dev_info(dcp->dev, "disp0 applyProperty(%u, %#x): ret %d retcode %#x reply %*ph\n",
++		 property, value, ret, *retcode, 32, reply);
++	kfree(reply);
++	return ret;
++}
++
++/*
++ * Selector 12 is the matching getProperty: request of at least 0x1c bytes
++ * with the property at payload +4; the 0x18-byte reply carries the property
++ * again at +0xc and its value at +0x10.
++ */
++#define DISP0_OP_GET_PROPERTY 12
++
++int dcp_disp0_get_property(struct apple_dcp *dcp, u32 property, u32 *value,
++			   u32 *retcode)
++{
++	struct apple_epic_service *service = READ_ONCE(dcp->disp0_service);
++	u8 request[0x20] = {};
++	u8 *reply;
++	int ret;
++
++	if (!service || READ_ONCE(service->torndown))
++		return -ENODEV;
++	put_unaligned_le32(DISP0_OP_GET_PROPERTY, request);
++	put_unaligned_le32(sizeof(request), request + 4);
++	put_unaligned_le32(property, request + 16 + 4);
++	reply = kzalloc(IBOOT_QUERY_RX_SIZE, GFP_KERNEL);
++	if (!reply)
++		return -ENOMEM;
++	*retcode = 0;
++	ret = afk_send_command(service, EPIC_SUBTYPE_STD_SERVICE, request,
++			       sizeof(request), reply, IBOOT_QUERY_RX_SIZE, retcode);
++	dev_dbg(dcp->dev, "disp0 getProperty(%u): ret %d retcode %#x reply %*ph\n",
++		property, ret, *retcode, 32, reply);
++	if (!ret && !*retcode && get_unaligned_le32(reply + 0xc) != property)
++		dev_warn(dcp->dev, "disp0 getProperty(%u): reply %*ph\n", property, 32, reply);
++	*value = get_unaligned_le32(reply + 0x10);
++	kfree(reply);
++	return ret;
++}
++
++/* Write a property number, read back "property value retcode". */
++static ssize_t get_property_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	struct apple_dcp *dcp = dev_get_drvdata(dev);
++	u32 property, value = 0, retcode = 0;
++	int ret;
++
++	if (kstrtou32(strim((char *)buf), 0, &property))
++		return -EINVAL;
++	ret = dcp_disp0_get_property(dcp, property, &value, &retcode);
++	if (ret)
++		return ret;
++	WRITE_ONCE(dcp->disp0_last_get, ((u64)property << 32) | value);
++	WRITE_ONCE(dcp->disp0_last_retcode, retcode);
++	return count;
++}
++
++static ssize_t get_property_show(struct device *dev,
++				 struct device_attribute *attr, char *buf)
++{
++	struct apple_dcp *dcp = dev_get_drvdata(dev);
++	u64 last = READ_ONCE(dcp->disp0_last_get);
++
++	return sysfs_emit(buf, "%u %#x %#x\n", (u32)(last >> 32), (u32)last,
++			  READ_ONCE(dcp->disp0_last_retcode));
++}
++static DEVICE_ATTR_RW(get_property);
++
++static ssize_t apply_property_store(struct device *dev,
++				    struct device_attribute *attr,
++				    const char *buf, size_t count)
++{
++	struct apple_dcp *dcp = dev_get_drvdata(dev);
++	u32 property, value, retcode;
++	int ret;
++
++	if (sscanf(buf, "%u %i", &property, &value) != 2)
++		return -EINVAL;
++	ret = dcp_disp0_apply_property(dcp, property, value, &retcode);
++	if (ret)
++		return ret;
++	return retcode ? -EIO : count;
++}
++static DEVICE_ATTR_WO(apply_property);
++
++static void disp0_props_remove(void *data)
++{
++	struct apple_dcp *dcp = data;
++
++	device_remove_file(dcp->dev, &dev_attr_get_property);
++	device_remove_file(dcp->dev, &dev_attr_apply_property);
++	WRITE_ONCE(dcp->disp0_service, NULL);
++}
++
++static void disp0_props_init(struct apple_epic_service *service)
++{
++	struct apple_dcp *dcp = service->ep->dcp;
++	int ret;
++
++	if (!appledrm_disp0_props || !dcp_has_panel(dcp))
++		return;
++	WRITE_ONCE(dcp->disp0_service, service);
++	ret = device_create_file(dcp->dev, &dev_attr_apply_property);
++	if (!ret)
++		ret = device_create_file(dcp->dev, &dev_attr_get_property);
++	if (!ret)
++		ret = devm_add_action_or_reset(dcp->dev, disp0_props_remove, dcp);
++	dev_info(dcp->dev, "disp0 service on channel %u: applyProperty %s\n",
++		 service->channel, ret ? "unavailable" : "via apply_property");
++}
++
+ static void disp_service_init(struct apple_epic_service *service, const char *name,
+ 			const char *class, s64 unit)
+ {
+@@ -699,8 +847,10 @@ static void disp_service_init(struct apple_epic_service *service, const char *na
+ 	struct iboot_query *query;
+ 	int ret;
+ 
+-	if (!dcp->external)
++	if (!dcp->external) {
++		disp0_props_init(service);
+ 		return;
++	}
+ 	query = devm_kzalloc(dcp->dev, sizeof(*query), GFP_KERNEL);
+ 	if (!query)
+ 		return;
+diff --git a/drivers/gpu/drm/apple/ibootep.h b/drivers/gpu/drm/apple/ibootep.h
+index aa44c2f..8bb2e4d 100644
+--- a/drivers/gpu/drm/apple/ibootep.h
++++ b/drivers/gpu/drm/apple/ibootep.h
+@@ -27,4 +27,11 @@ int ibootep_rearm_pattern(struct apple_dcp *dcp);
+  */
+ int ibootep_present_frame(struct apple_dcp *dcp, u64 iova, size_t size, u32 stride);
+ 
++/* applyProperty(property, value) on the internal panel DCP (appledrm.disp0_props). */
++int dcp_disp0_apply_property(struct apple_dcp *dcp, u32 property, u32 value,
++			     u32 *retcode);
++
++int dcp_disp0_get_property(struct apple_dcp *dcp, u32 property, u32 *value,
++			   u32 *retcode);
++
+ #endif
+diff --git a/drivers/gpu/drm/apple/iomfb.c b/drivers/gpu/drm/apple/iomfb.c
+index 6e80eca..3dce6a5 100644
+--- a/drivers/gpu/drm/apple/iomfb.c
++++ b/drivers/gpu/drm/apple/iomfb.c
+@@ -1878,7 +1878,8 @@ int dcp_get_modes(struct drm_connector *connector)
+ 		} else {
+ 			apple_connector->drm_edid_firmware_derived = false;
+ 		}
+-	} else if (nr_modes && dcp_is_v14_7_panel(dcp) && dcp->panel.id.vendor[0]) {
++	} else if (nr_modes && (dcp_is_v14_7_panel(dcp) || dcp_panel_hdr(dcp)) &&
++		   dcp->panel.id.vendor[0]) {
+ 		/*
+ 		 * No EDID comes for this panel: publish the base block of its
+ 		 * node, sized as the connector is (the firmware's size, else the
+@@ -1887,9 +1888,15 @@ int dcp_get_modes(struct drm_connector *connector)
+ 		int update;
+ 
+ 		dcp_update_connector_dimensions(dcp, connector);
+-		update = dcp_panel_edid_update(connector, &dcp->panel.id,
+-					       connector->display_info.width_mm,
+-					       connector->display_info.height_mm);
++		if (dcp_panel_hdr(dcp))
++			update = dcp_panel_edid_update_hdr(connector, &dcp->panel.id,
++							   connector->display_info.width_mm,
++							   connector->display_info.height_mm,
++							   dcp_backlight_max_nits(dcp));
++		else
++			update = dcp_panel_edid_update(connector, &dcp->panel.id,
++						       connector->display_info.width_mm,
++						       connector->display_info.height_mm);
+ 		dcp_update_connector_dimensions(dcp, connector);
+ 		apple_connector->drm_edid_firmware_derived = false;
+ 		if (update)
+diff --git a/drivers/gpu/drm/apple/iomfb_template.c b/drivers/gpu/drm/apple/iomfb_template.c
+index 78162bd..7959034 100644
+--- a/drivers/gpu/drm/apple/iomfb_template.c
++++ b/drivers/gpu/drm/apple/iomfb_template.c
+@@ -11,6 +11,7 @@
+ #include <linux/completion.h>
+ #include <linux/delay.h>
+ #include <linux/dma-mapping.h>
++#include <linux/hdmi.h>
+ #include <linux/iommu.h>
+ #include <linux/kref.h>
+ #include <linux/module.h>
+@@ -20,6 +21,7 @@
+ #include <linux/slab.h>
+ #include <linux/unaligned.h>
+ 
++#include <drm/drm_connector.h>
+ #include <drm/drm_fb_dma_helper.h>
+ #include <drm/drm_fourcc.h>
+ #include <drm/drm_framebuffer.h>
+@@ -489,8 +491,8 @@ static void iomfb_cb_pr_publish(struct apple_dcp *dcp, struct iomfb_property *pr
+ 			u32 nits = prop->value / dcp->brightness.scale;
+ 
+ 			/* Firmware can report the old 420-nit scale above the cap. */
+-			if (dcp->brightness.maximum && nits > dcp->brightness.maximum)
+-				nits = dcp->brightness.maximum;
++			if (dcp->brightness.maximum && nits > dcp_backlight_max_nits(dcp))
++				nits = dcp_backlight_max_nits(dcp);
+ 			dcp->brightness.nits = nits;
+ 			/* notify backlight device of the initial brightness */
+ 			if (!dcp->brightness.bl_dev && dcp->brightness.maximum > 0)
+@@ -2324,6 +2326,29 @@ static void dcp_set_adaptive_sync(struct apple_dcp *dcp, u32 min_vrr,
+ 			      cookie);
+ }
+ 
++/*
++ * appledrm.hdr: userspace asks for HDR10 with PQ HDR output metadata on an
++ * external connector; the output then runs a PQ BT.2020 colour mode and the
++ * planes are tagged as PQ BT.2020 for the firmware.
++ */
++static bool DCP_FW_NAME(dcp_wants_hdr10)(struct apple_dcp *dcp)
++{
++	struct apple_connector *connector = READ_ONCE(dcp->connector);
++	const struct hdr_output_metadata *meta;
++	struct drm_connector_state *state;
++
++	if (!appledrm_hdr || !connector ||
++	    (dcp_has_panel(dcp) && !dcp_panel_hdr(dcp)))
++		return false;
++	state = connector->base.state;
++	if (!state || !state->hdr_output_metadata ||
++	    state->hdr_output_metadata->length < sizeof(*meta))
++		return false;
++	meta = state->hdr_output_metadata->data;
++	return meta->metadata_type == HDMI_STATIC_METADATA_TYPE1 &&
++	       meta->hdmi_metadata_type1.eotf == HDMI_EOTF_SMPTE_ST2084;
++}
++
+ int DCP_FW_NAME(iomfb_modeset)(struct apple_dcp *dcp,
+ 			       struct drm_crtc_state *crtc_state)
+ {
+@@ -2338,11 +2363,23 @@ int DCP_FW_NAME(iomfb_modeset)(struct apple_dcp *dcp,
+ 		return -EIO;
+ 	}
+ 
++	/* The panel link keeps its native mode; its planes follow each swap. */
++	dcp->hdr10 = false;
++	if (!dcp_has_panel(dcp) && DCP_FW_NAME(dcp_wants_hdr10)(dcp)) {
++		if (mode->hdr.score >= 0) {
++			mode->color_mode_id = mode->hdr.id;
++			dcp->hdr10 = true;
++		} else {
++			dev_info(dcp->dev, "HDR10 requested; this timing has no PQ BT.2020 colour mode\n");
++		}
++	}
+ 	dev_info(dcp->dev,
+ 		 "set_digital_out_mode(color:%d timing:%d) " DRM_MODE_FMT "\n",
+ 		 mode->color_mode_id, mode->timing_mode_id,
+ 		 DRM_MODE_ARG(&crtc_state->mode));
+-	if (mode->color_mode_id == mode->sdr_rgb.id)
++	if (dcp->hdr10)
++		cmode = &mode->hdr;
++	else if (mode->color_mode_id == mode->sdr_rgb.id)
+ 		cmode = &mode->sdr_rgb;
+ 	else if (mode->color_mode_id == mode->sdr_444.id)
+ 		cmode = &mode->sdr_444;
+@@ -2517,6 +2554,18 @@ void DCP_FW_NAME(iomfb_flush)(struct apple_dcp *dcp, struct drm_crtc *crtc, stru
+ 		    req->surf[l].base.colorspace == DCP_COLORSPACE_BG_SRGB)
+ 			req->surf[l].base.colorspace = DCP_COLORSPACE_NATIVE;
+ 
++#if DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0)
++		dcp_backlight_layer_edr(dcp, &req->surf[l].base.unk_num,
++					&req->surf[l].base.unk_denom);
++#endif
++
++		/* An HDR10 output scans out PQ BT.2020 RGB planes. */
++		if ((dcp_has_panel(dcp) ? DCP_FW_NAME(dcp_wants_hdr10)(dcp) : dcp->hdr10) &&
++		    !new_state->fb->format->is_yuv) {
++			req->surf[l].base.xfer_func = DCP_XFER_FUNC_HDR;
++			req->surf[l].base.colorspace = DCP_COLORSPACE_BG_BT2020;
++		}
++
+ #if DCP_FW_VER >= DCP_FW_VERSION(26, 0, 0)
+ 		/* H17P external SDR RGB needs an sRGB source tag. Native
+ 		 * tagging washes out the same pixel values on this profile.
+@@ -2568,6 +2617,14 @@ void DCP_FW_NAME(iomfb_flush)(struct apple_dcp *dcp, struct drm_crtc *crtc, stru
+ 	/* These fields should be set together */
+ 	req->swap.swap_completed = req->swap.swap_enabled;
+ 
++#if !DCP_FW_LAYOUT_14_7(DCP_FW_VER) && DCP_FW_VER >= DCP_FW_VERSION(13, 2, 0) && \
++	DCP_FW_VER < DCP_FW_VERSION(26, 0, 0)
++	static_assert(offsetof(struct DCP_FW_NAME(dcp_swap), bl_unk) + 132 <=
++		      sizeof(struct DCP_FW_NAME(dcp_swap)));
++	if (dcp_has_panel(dcp))
++		dcp_backlight_fill_edr(dcp, (u8 *)&req->swap.bl_unk);
++#endif
++
+ 	/* update brightness if changed */
+ 	update_brightness = dcp_has_panel(dcp) && dcp->brightness.update;
+ #if DCP_FW_VERSION(26, 0, 0) <= DCP_FW_VER
+@@ -2582,6 +2639,22 @@ void DCP_FW_NAME(iomfb_flush)(struct apple_dcp *dcp, struct drm_crtc *crtc, stru
+ #endif
+ 		req->swap.bl_value = dcp->brightness.dac;
+ 		req->swap.bl_power = 0x40;
++#if !DCP_FW_LAYOUT_14_7(DCP_FW_VER) && DCP_FW_VER < DCP_FW_VERSION(26, 0, 0)
++		/*
++		 * The level's flag bytes start at bl_unk: brightness, then the
++		 * backlight nits cap (BLNitsCap), whose binary64 follows the
++		 * level's at bl_unk + 13. XDR raises the cap with the range.
++		 */
++		if (dcp_backlight_xdr_nits(dcp)) {
++			u8 *bl = (u8 *)&req->swap.bl_unk;
++
++			static_assert(offsetof(struct DCP_FW_NAME(dcp_swap), unk_2f3) ==
++				      offsetof(struct DCP_FW_NAME(dcp_swap), bl_unk) + 13);
++			bl[1] = 1;
++			put_unaligned_le64(dcp_nits_binary64(dcp_backlight_xdr_nits(dcp)),
++					   bl + 13);
++		}
++#endif
+ 		dcp->brightness.update = false;
+ 	}
+ 
+diff --git a/drivers/gpu/drm/apple/parser.c b/drivers/gpu/drm/apple/parser.c
+index 1d06383..ae9b50d 100644
+--- a/drivers/gpu/drm/apple/parser.c
++++ b/drivers/gpu/drm/apple/parser.c
+@@ -448,6 +448,14 @@ static int fill_color_mode(struct dcp_color_mode *color,
+ 	return 0;
+ }
+ 
++/* An HDR10 output mode: PQ with BT.2020 primaries, at least 10 bits. */
++static bool hdr10_color_mode(const struct color_mode *color)
++{
++	return color->eotf == DCP_EOTF_ST_2084 && color->depth >= 10 &&
++	       (color->colorimetry == DCP_COLORIMETRY_BT2020_RGB ||
++		color->colorimetry == DCP_COLORIMETRY_BT2020_YCC);
++}
++
+ /* External SDR scanout must not select a wide-gamut mode by score alone. */
+ static unsigned int external_sdr_rank(const struct color_mode *color)
+ {
+@@ -564,6 +572,7 @@ static int parse_color_modes(struct dcp_parse_ctx *handle,
+ 	out->sdr_rgb.score = -1;
+ 	out->sdr.score = -1;
+ 	out->best.score = -1;
++	out->hdr.score = -1;
+ 
+ 	ret = iterator_begin(handle, &outer_it, false);
+ 	if (ret)
+@@ -643,6 +652,9 @@ static int parse_color_modes(struct dcp_parse_ctx *handle,
+ 			if (cmode.id <= U32_MAX &&
+ 			    timing_color_contains(&limits->dsc_required, cmode.id))
+ 				continue;
++			if (hdr10_color_mode(&cmode) &&
++			    !timing_color_contains(&limits->unsafe, cmode.id))
++				fill_color_mode(&out->hdr, &cmode);
+ 			rank = external_sdr_rank(&cmode);
+ 			if (cmode.id <= U32_MAX &&
+ 			    timing_color_contains(&limits->unsafe, cmode.id)) {
+@@ -669,6 +681,8 @@ static int parse_color_modes(struct dcp_parse_ctx *handle,
+ 			continue;
+ 		}
+ 
++		if (hdr10_color_mode(&cmode))
++			fill_color_mode(&out->hdr, &cmode);
+ 		if (cmode.eotf == DCP_EOTF_SDR_GAMMA) {
+ 			if (cmode.pixel_encoding == DCP_COLOR_FORMAT_RGB &&
+ 				cmode.depth <= 10)
+@@ -728,6 +742,7 @@ static int parse_mode(struct dcp_parse_ctx *handle,
+ 		.sdr_444.score = -1,
+ 		.sdr.score = -1,
+ 		.best.score = -1,
++		.hdr.score = -1,
+ 	};
+ 	*score = -1;
+ 	handle->ambiguous_180hz = false;
+diff --git a/drivers/gpu/drm/apple/parser.h b/drivers/gpu/drm/apple/parser.h
+index 2ba2c22..edc13ee 100644
+--- a/drivers/gpu/drm/apple/parser.h
++++ b/drivers/gpu/drm/apple/parser.h
+@@ -119,6 +119,8 @@ struct dcp_display_mode {
+ 	struct dcp_color_mode sdr_444;
+ 	struct dcp_color_mode sdr;
+ 	struct dcp_color_mode best;
++	/* The best PQ (HDR10) BT.2020 colour mode of this timing, for appledrm.hdr. */
++	struct dcp_color_mode hdr;
+ 	bool vrr;
+ 	/* IsPreferred, outside the external SDR path */
+ 	bool preferred;

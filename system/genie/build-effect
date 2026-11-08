@@ -1,0 +1,25 @@
+#!/bin/bash
+# Build and install the "macgenie" KWin effect: KWin 6.8's Magic Lamp (GPL-2.0-or-later, sources here)
+# aimed at the dock icon on the window's own screen, also for a second window of an app already in
+# the dock (Plasma publishes no icon for those when there are several docks; see genie.cpp).
+# Installs into /usr (KWin only loads effects from its plugin directory); rerun after a KWin update.
+# KWin keeps a loaded effect's library mapped until the next login: a rebuilt plugin takes effect then.
+#   build-effect            build and install (sudo)
+#   build-effect --build    build only (prints the plugin path)
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+b=$(mktemp -d)
+trap 'rm -rf "$b"' EXIT
+pacman -Q vulkan-headers >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm vulkan-headers   # KWin's CMake config needs them
+# CMake 4 here sometimes fails to find Qt6Gui/OpenGL on a first configure and succeeds on the next
+for try in 1 2 3; do
+    rm -rf "$b"/*; cmake -S "$here" -B "$b" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release >"$b.log" 2>&1 && break
+    [ "$try" = 3 ] && { cat "$b.log"; exit 1; }
+done
+rm -f "$b.log"
+cmake --build "$b" -j"$(nproc)" >/dev/null
+if [ "${1:-}" = --build ]; then echo "built OK"; exit 0; fi
+f=/usr/lib/qt6/plugins/kwin/effects/plugins/macgenie.so
+# new file, then rename: overwriting a library KWin has mapped in place would crash it
+sudo install -m755 "$b/macgenie.so" "$f.new" && sudo mv -f "$f.new" "$f"
+echo "installed: $f"

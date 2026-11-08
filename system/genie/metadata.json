@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Category": "Appearance",
+        "Description": "macOS genie: minimized windows flow into their icon in the dock on the window's own screen",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "Genie"
+    },
+    "org.kde.kwin.effect": {
+        "exclusiveGroup": "minimize"
+    }
+}

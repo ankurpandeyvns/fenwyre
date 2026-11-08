@@ -23,7 +23,7 @@ PlasmoidItem {
     readonly property int maxRows: 9
     // Same glass tint as the menu bar and popups (kept in sync by ~/.local/bin/plasma-sync-glass), over a KWin blur.
     readonly property bool dark: Kirigami.Theme.textColor.hslLightness > 0.5
-    readonly property color glass: dark ? Qt.rgba(0, 0, 0, 0.45) : Qt.rgba(0.8, 0.8, 0.8, 0.35)
+    readonly property color glass: dark ? Qt.rgba(0, 0, 0, 0.38) : Qt.rgba(0.8, 0.8, 0.8, 0.35)
     readonly property color fg: dark ? "white" : "#1d1d1f"
     readonly property color stroke: dark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.10)
     readonly property color dim: dark ? Qt.rgba(1, 1, 1, 0.45) : Qt.rgba(0, 0, 0, 0.45)

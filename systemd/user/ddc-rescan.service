@@ -1,0 +1,11 @@
+[Unit]
+Description=Brightness: make PowerDevil pick up external monitors that came up after it
+PartOf=graphical-session.target
+After=graphical-session.target plasma-powerdevil.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/ddc-rescan
+
+[Install]
+WantedBy=graphical-session.target

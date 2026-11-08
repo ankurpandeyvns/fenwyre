@@ -13,19 +13,33 @@ for _ in $(seq 30); do
   sleep 1
 done
 
-last=0
+# Each step takes 50-300 ms (DDC, kscreen-doctor), longer than the ~25 ms between key repeats. Events
+# that pile up meanwhile are drained, not replayed: one step per drain, and a release drops the repeats
+# queued before it, so the level stops when the key is let go.
+parse(){  # line -> ev=press|repeat|release, d=up|down; non-zero if not a shortcut event
+  case "$1" in
+    *globalShortcutPressed*)  ev=press ;;
+    *globalShortcutRepeated*) ev=repeat ;;
+    *globalShortcutReleased*) ev=release ;;
+    *) return 1 ;;
+  esac
+  case "$1" in *\'up\'*) d=up ;; *\'down\'*) d=down ;; *) return 1 ;; esac
+}
+held=""
 gdbus monitor --session --dest org.kde.kglobalaccel --object-path "/component/$C" 2>/dev/null |
 while IFS= read -r line; do
-  case "$line" in
-    *globalShortcutPressed*\'up\'*)    dir=up;   rep=0 ;;
-    *globalShortcutPressed*\'down\'*)  dir=down; rep=0 ;;
-    *globalShortcutRepeated*\'up\'*)   dir=up;   rep=1 ;;
-    *globalShortcutRepeated*\'down\'*) dir=down; rep=1 ;;
-    *) continue ;;
-  esac
-  now=$(date +%s%3N)
-  (( rep && now - last < 90 )) && continue   # key repeat is ~40/s; kscreen-doctor needs ~50 ms
-  last=$now
-  echo "$dir repeat=$rep"
-  "$HOME/.local/bin/brightness-here" "$dir"
+  todo=""
+  while :; do
+    if parse "$line"; then
+      case $ev in
+        press)   held=$d; todo="$d press" ;;
+        repeat)  [ "$held" = "$d" ] && todo=${todo:-"$d repeat"} ;;
+        release) [ "$held" = "$d" ] && held=""; [ "${todo% *}" = "$d" ] && [ "${todo#* }" = repeat ] && todo="" ;;
+      esac
+    fi
+    IFS= read -r -t 0.005 line || break    # anything else already queued?
+  done
+  [ -n "$todo" ] || continue
+  echo "$todo"
+  "$HOME/.local/bin/brightness-here" "${todo% *}"
 done

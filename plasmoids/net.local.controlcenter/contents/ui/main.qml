@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
+import QtQuick.Window
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponents
@@ -13,6 +15,8 @@ import org.kde.plasma.private.mpris as Mpris
 import org.kde.notificationmanager as NotificationManager
 import org.kde.plasma.private.battery as Bat
 import org.kde.plasma.private.batterymonitor as BatMon
+import net.local.blur as Blur
+import org.kde.layershell as LayerShell
 
 // macOS (26/27) style Control Center for the Plasma menu bar.
 // Every control is bound to a live Plasma backend; see the module sections below.
@@ -54,15 +58,25 @@ PlasmoidItem {
     property string screenModel: ""
     property date nowTick: new Date()
 
-    // In a panel: menu bar icon + popup. On the desktop / in a window: the panel itself.
-    preferredRepresentation: (Plasmoid.formFactor === PlasmaCore.Types.Planar || Plasmoid.formFactor === PlasmaCore.Types.Application) ? fullRepresentation : compactRepresentation
+    // Menu bar icon (compactRepresentation) + a layer-shell overlay window with the glass card (ccWindow),
+    // like Spotlight: Plasma's applet popup can't drop its frame (attached flush to the bar, small
+    // corners) and PlasmaCore.Dialog clears blur on every show/resize/move. The full representation is
+    // an empty item only so Plasma creates the panel button; `expanded` is kept false and ccOpen drives
+    // the card (panel click, global shortcut via Plasmoid.activated).
+    property bool ccOpen: false
+    Connections {
+        target: Plasmoid
+        function onActivated() { root.ccOpen = !root.ccOpen; }
+    }
+    onExpandedChanged: if (root.expanded) root.expanded = false
+    fullRepresentation: Item {}
     toolTipMainText: "Control Center"
     toolTipSubText: ""
     Plasmoid.icon: "preferences-system"
     Plasmoid.status: PlasmaCore.Types.ActiveStatus
 
-    onExpandedChanged: {
-        if (root.expanded) {
+    onCcOpenChanged: {
+        if (root.ccOpen) {
             nowTick = new Date();
             refreshNightLight();
         } else {
@@ -79,7 +93,7 @@ PlasmoidItem {
     Timer {
         interval: 30000
         repeat: true
-        running: root.expanded
+        running: root.ccOpen
         onTriggered: root.nowTick = new Date()
     }
 
@@ -101,7 +115,7 @@ PlasmoidItem {
         exec.connectSource(cmd);
     }
     function openSettings(kcm) {
-        root.expanded = false;
+        root.ccOpen = false;
         run("systemsettings " + kcm);
     }
 
@@ -755,8 +769,8 @@ PlasmoidItem {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
         property bool wasExpanded: false
-        onPressed: wasExpanded = root.expanded
-        onClicked: root.expanded = !wasExpanded
+        onPressed: wasExpanded = root.ccOpen
+        onClicked: root.ccOpen = !wasExpanded
 
         readonly property string scrName: Screen.name
         readonly property string scrModel: Screen.model
@@ -770,7 +784,7 @@ PlasmoidItem {
             height: Math.min(parent.height, Kirigami.Units.iconSizes.small + 8)
             radius: 6
             color: Kirigami.Theme.textColor
-            opacity: root.expanded ? 0.18 : (compact.containsMouse ? 0.09 : 0)
+            opacity: root.ccOpen ? 0.18 : (compact.containsMouse ? 0.09 : 0)
             Behavior on opacity { NumberAnimation { duration: 100 } }
         }
         Glyph {
@@ -783,18 +797,136 @@ PlasmoidItem {
     }
 
     // ================================================================ popup
-    fullRepresentation: Item {
+    // Floating glass card like macOS 26/27: a few points below the menu bar, concentric continuous
+    // corners, hairline rim, soft shadow. Plasma's applet popup can't drop its frame (attached flush to
+    // the bar, small corners), so the applet opens this frameless dialog instead.
+    Window {
+        id: ccWindow
+        visible: root.ccOpen
+        color: "transparent"
+        flags: Qt.FramelessWindowHint
+        // The screen of this applet's menu bar (compact reports Screen.name). Layer-shell takes the output
+        // from its own `screen` (a QScreen), else the compositor picks one.
+        readonly property var menuBarScreen: {
+            const all = Qt.application.screens;
+            for (let i = 0; i < all.length; ++i) if (all[i].name === root.screenName) return all[i];
+            return all[0];
+        }
+        screen: menuBarScreen
+        // a QScreen: the screen the menu bar's PanelView follows (its `screen` isn't exposed to QML)
+        readonly property var panelScreen: {
+            const icon = root.compactRepresentationItem;
+            return (icon && icon.Window.window && icon.Window.window.screenToFollow) || null;
+        }
+        LayerShell.Window.screen: panelScreen
+        LayerShell.Window.wantsToBeOnActiveScreen: panelScreen === null
+        onActiveChanged: if (active) full.forceActiveFocus()
+
+        LayerShell.Window.scope: "controlcenter"
+        LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+        LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom
+                                   | LayerShell.Window.AnchorLeft | LayerShell.Window.AnchorRight
+        LayerShell.Window.exclusionZone: -1
+        LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityExclusive
+
+        // Click anywhere outside the card closes it, like macOS.
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.ccOpen = false
+        }
+
+        // Under the menu bar icon, kept 8 px inside the screen edges.
+        readonly property point anchorPoint: {
+            const icon = root.compactRepresentationItem;
+            if (!root.ccOpen || !icon || !icon.Window.window || !ccWindow.screen) return Qt.point(width - 8, 0);
+            const g = icon.mapToGlobal(icon.width / 2, icon.height);
+            return Qt.point(g.x - ccWindow.screen.virtualX, icon.Window.window.height);
+        }
+
+        Item {
+        id: card
+        x: Math.max(8 - margin, Math.min(ccWindow.width - 8 - width + margin, ccWindow.anchorPoint.x - width / 2))
+        y: ccWindow.anchorPoint.y
+        width: Layout.minimumWidth
+        height: Layout.minimumHeight
+        MouseArea { x: glassCard.x; y: glassCard.y; width: glassCard.width; height: glassCard.height }   // swallow clicks inside
+        readonly property int pad: 12                       // module inset from the card edge
+        readonly property int radius: 18 + pad              // concentric with the 18 px module tiles
+        readonly property int gapTop: 6                     // below the menu bar
+        readonly property int margin: 14                    // room for the shadow
+        Layout.minimumWidth: root.popupWidth + 2 * pad + 2 * margin
+        Layout.maximumWidth: Layout.minimumWidth
+        Layout.preferredWidth: Layout.minimumWidth
+        Layout.minimumHeight: pages.implicitHeight + 2 * pad + gapTop + margin
+        Layout.maximumHeight: Layout.minimumHeight
+        Layout.preferredHeight: Layout.minimumHeight
+
+        Item {
+            id: glassCard
+            x: card.margin
+            y: card.gapTop
+            width: root.popupWidth + 2 * card.pad
+            height: pages.implicitHeight + 2 * card.pad
+
+            Blur.BlurBehind {
+                anchors.fill: parent
+                radius: card.radius
+                active: root.ccOpen
+            }
+            Rectangle {   // tint + shadow
+                anchors.fill: parent
+                radius: card.radius
+                color: root.dark ? Qt.rgba(0, 0, 0, 0.38) : Qt.rgba(0.96, 0.96, 0.96, 0.45)
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    shadowEnabled: true
+                    shadowColor: Qt.rgba(0, 0, 0, root.dark ? 0.45 : 0.22)
+                    shadowBlur: 0.9
+                    shadowVerticalOffset: 6
+                    blurMax: 32
+                }
+            }
+            Rectangle {   // hairline rim, brighter along the top like light catching the edge
+                anchors.fill: parent
+                radius: card.radius
+                color: "transparent"
+                border.width: 1
+                border.color: root.dark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.6)
+            }
+            Rectangle {
+                anchors.fill: parent
+                radius: card.radius
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, root.dark ? 0.22 : 0.8)
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    maskEnabled: true
+                    maskSource: rimFade
+                }
+            }
+            Rectangle {
+                id: rimFade
+                anchors.fill: parent
+                visible: false
+                layer.enabled: true
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: "white" }
+                    GradientStop { position: 0.35; color: "transparent" }
+                }
+            }
+
+    Item {
         id: full
-        Layout.minimumWidth: root.popupWidth
-        Layout.maximumWidth: root.popupWidth
-        Layout.preferredWidth: root.popupWidth
-        Layout.minimumHeight: pages.implicitHeight
-        Layout.maximumHeight: pages.implicitHeight
-        Layout.preferredHeight: pages.implicitHeight
+        x: card.pad
+        y: card.pad
+        width: root.popupWidth
+        height: pages.implicitHeight
         focus: true
         Keys.onEscapePressed: event => {
-            if (root.page !== "main") { root.openPage("main", null); event.accepted = true; }
-            else event.accepted = false;
+            if (root.page !== "main") root.openPage("main", null);
+            else root.ccOpen = false;
+            event.accepted = true;
         }
 
         ColumnLayout {
@@ -901,11 +1033,11 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onPressedChanged: parent.down = pressed
                         onClicked: {
-                            root.expanded = false;
+                            root.ccOpen = false;
                             root.run("sleep 0.15; qdbus6 org.kde.kglobalaccel /component/kwin org.kde.kglobalaccel.Component.invokeShortcut Overview");
                         }
                     }
-                    PlasmaComponents.ToolTip { text: "Overview (Stage Manager)"; visible: ovTile.hovered && root.page === "main" && root.expanded }
+                    PlasmaComponents.ToolTip { text: "Overview (Stage Manager)"; visible: ovTile.hovered && root.page === "main" && root.ccOpen }
                 }
 
                 // Screen Mirroring 1x1 -> KScreen display mode selector
@@ -924,11 +1056,11 @@ PlasmoidItem {
                         cursorShape: Qt.PointingHandCursor
                         onPressedChanged: parent.down = pressed
                         onClicked: {
-                            root.expanded = false;
+                            root.ccOpen = false;
                             root.run("qdbus6 org.kde.kscreen.osdService /org/kde/kscreen/osdService org.kde.kscreen.osdService.showActionSelector");
                         }
                     }
-                    PlasmaComponents.ToolTip { text: "Screen Mirroring (display arrangement)"; visible: mirTile.hovered && root.page === "main" && root.expanded }
+                    PlasmaComponents.ToolTip { text: "Screen Mirroring (display arrangement)"; visible: mirTile.hovered && root.page === "main" && root.ccOpen }
                 }
 
                 // Display 4x1
@@ -1007,7 +1139,7 @@ PlasmoidItem {
                         anchors.bottom: parent.bottom
                         enabled: !!root.player && root.player.canRaise
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: { root.player.Raise(); root.expanded = false; }
+                        onClicked: { root.player.Raise(); root.ccOpen = false; }
                     }
                     Row {
                         id: npControls
@@ -1065,7 +1197,7 @@ PlasmoidItem {
                         onPressedChanged: parent.down = pressed
                         onClicked: root.openPage("keyboard", parent.mapToItem(pages, parent.width / 2, parent.height / 2))
                     }
-                    PlasmaComponents.ToolTip { text: "Keyboard Brightness"; visible: kbdTile.hovered && root.page === "main" && root.expanded }
+                    PlasmaComponents.ToolTip { text: "Keyboard Brightness"; visible: kbdTile.hovered && root.page === "main" && root.ccOpen }
                 }
 
                 // Dark Mode 1x1
@@ -1081,7 +1213,7 @@ PlasmoidItem {
                         on: root.darkModeOn
                         onClicked: BC.DarkModeControl.darkMode = !BC.DarkModeControl.darkMode
                     }
-                    PlasmaComponents.ToolTip { text: "Dark Mode"; visible: dmTile.hovered && root.page === "main" && root.expanded }
+                    PlasmaComponents.ToolTip { text: "Dark Mode"; visible: dmTile.hovered && root.page === "main" && root.ccOpen }
                 }
 
                 // Battery 2x1
@@ -1472,5 +1604,8 @@ PlasmoidItem {
                 }
             }
         }
-    }
+    }   // full
+        }   // glassCard
+    }   // card
+    }   // ccWindow
 }

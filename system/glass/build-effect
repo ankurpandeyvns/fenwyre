@@ -1,0 +1,27 @@
+#!/bin/bash
+# Build and install the KWin "Glass" effect (github.com/4v3ngR/kwin-effects-glass, GPL): a fork of
+# KWin's blur with Liquid Glass refraction at the rounded bevel and a specular rim. It replaces the
+# stock blur effect (only one blur effect can run). Installs into /usr (KWin only loads effects from
+# its plugin directory); rerun after a KWin update, the effect is built against KWin's private API.
+#   build-effect            build and install (sudo)
+#   build-effect --build    build only (prints the plugin path)
+# GLASS_COMMIT=<sha> pins another revision; the default supports KWin 6.8.
+set -euo pipefail
+commit=${GLASS_COMMIT:-ef66f1a}
+src=${XDG_CACHE_HOME:-$HOME/.cache}/kde-macos-parity/kwin-effects-glass
+# vulkan-headers: KWin's CMake config needs them to be found at all (no Vulkan code is built)
+pacman -Q vulkan-headers >/dev/null 2>&1 || sudo pacman -S --needed --noconfirm vulkan-headers
+if [ ! -d "$src/.git" ]; then
+    mkdir -p "$(dirname "$src")"
+    git clone -q https://github.com/4v3ngR/kwin-effects-glass "$src"
+fi
+git -C "$src" fetch -q origin
+git -C "$src" -c advice.detachedHead=false checkout -q "$commit"
+rm -rf "$src/build"
+cmake -S "$src" -B "$src/build" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release \
+    -DKWIN_EFFECTS_INTERFACE=/usr/share/dbus-1/interfaces/org.kde.kwin.Effects.xml >/dev/null
+cmake --build "$src/build" -j"$(nproc)" >/dev/null
+[ -f "$src/build/src/glass.so" ] || { echo "glass.so was not built (KWin development files missing?)"; exit 1; }
+if [ "${1:-}" = --build ]; then echo "$src/build/src/glass.so"; exit 0; fi
+sudo cmake --install "$src/build" >/dev/null
+echo "installed: /usr/lib/qt6/plugins/kwin/effects/plugins/glass.so"

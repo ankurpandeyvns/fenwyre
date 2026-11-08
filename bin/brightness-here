@@ -2,29 +2,57 @@
 # Change brightness of the display under the mouse only (like macOS + BetterDisplay).
 #   brightness-here up|down [step]
 # KWin's active output follows the mouse (kwinrc [Windows] ActiveMouseScreen, default true).
-#
-# The built-in panel's backlight is linear in nits, so equal raw steps look drastic at the low end.
-# Like macOS, it steps in perceived lightness (CIE L*) instead, via PowerDevil's 0..10000 scale; the
-# HUD shows the perceived level. External monitors (DDC/CI) already use a perceptual scale: raw steps.
+
 set -uo pipefail
 dir=${1:-up}; step=${2:-${BRIGHTNESS_STEP:-5}}   # percent per key press
 case "$dir" in up|down) ;; *) echo "usage: brightness-here up|down [step]" >&2; exit 2 ;; esac
 out=${BRIGHTNESS_OUTPUT:-$(qdbus6 org.kde.KWin /KWin org.kde.KWin.activeOutputName 2>/dev/null)}
 [ -n "$out" ] || exit 1
 
-if [[ $out == eDP* || $out == LVDS* ]]; then
-  SB=org.kde.ScreenBrightness
-  disp=""
-  for d in $(qdbus6 $SB 2>/dev/null | grep '^/org/kde/ScreenBrightness/display'); do
-    [ "$(qdbus6 $SB "$d" org.kde.ScreenBrightness.Display.IsInternal 2>/dev/null)" = true ] && { disp=$d; break; }
+# One source of truth: KDE's ScreenBrightness service (PowerDevil over KWin) holds the level of every
+# display; KWin drives the panel backlight and external monitors over DDC/CI and restores the level at
+# login. The tray slider, this script and the HUD all read and write that one value.
+SB=org.kde.ScreenBrightness
+edid_name() {  # monitor name from the output's EDID (descriptor 0xFC), e.g. "DELL P2422H"
+  local f; for f in /sys/class/drm/card*-"$out"/edid; do
+    python3 -I -c '
+import sys
+e = open(sys.argv[1], "rb").read(128)
+if len(e) < 128:
+    sys.exit(1)
+for o in (54, 72, 90, 108):
+    if e[o:o+3] == b"\0\0\0" and e[o+3] == 0xFC:
+        print(e[o+5:o+18].split(b"\n")[0].decode("ascii", "replace").strip()); sys.exit(0)
+sys.exit(1)
+' "$f" && return
   done
-  [ -n "$disp" ] || exit 1
-  step=${2:-${BRIGHTNESS_STEP_INTERNAL:-2.5}}   # finer steps on the built-in panel (40 from dark to full)
+}
+internal=false; [[ $out == eDP* || $out == LVDS* || $out == DSI* ]] && internal=true
+name=""; $internal || name=$(edid_name)
+disp=""
+for d in $(qdbus6 $SB 2>/dev/null | grep '^/org/kde/ScreenBrightness/display'); do
+  if $internal; then
+    [ "$(qdbus6 $SB "$d" org.kde.ScreenBrightness.Display.IsInternal 2>/dev/null)" = true ] && { disp=$d; break; }
+  elif [ -n "$name" ]; then
+    label=$(qdbus6 $SB "$d" org.kde.ScreenBrightness.Display.Label 2>/dev/null)
+    [[ $label == *"$name" ]] && { disp=$d; break; }
+  fi
+done
+
+if [ -n "$disp" ]; then
+  $internal && step=${2:-${BRIGHTNESS_STEP_INTERNAL:-2.5}}   # finer steps on the built-in panel
   max=$(qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.MaxBrightness)
   cur=$(qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.Brightness)
+  # Built-in panel: linear in nits, so step in perceived lightness (CIE L*), like macOS.
+  # External monitors: DDC/CI backlight is already perceptual, so step linearly.
   read -r raw level < <(python3 -I -c '
 import sys
-cur, mx, step, up = int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3]), sys.argv[4] == "up"
+cur, mx, step, up, internal = int(sys.argv[1]), int(sys.argv[2]), float(sys.argv[3]), sys.argv[4] == "up", sys.argv[5] == "true"
+if not internal:
+    l = 100 * cur / mx
+    l = round(l / step) * step if abs(l - round(l / step) * step) < step / 4 else l
+    l = min(100.0, l + step) if up else max(0.0, l - step)
+    print(round(l * mx / 100), round(l)); sys.exit()
 def L(y):  # relative luminance 0..1 -> perceived lightness 0..100
     return 116 * y ** (1 / 3) - 16 if y > 0.008856 else y * 903.3
 def Y(l):
@@ -33,28 +61,19 @@ l = L(cur / mx)
 l = round(l / step) * step if abs(l - round(l / step) * step) < step / 4 else l   # snap onto the step grid
 l = min(100.0, l + step) if up else max(step, l - step)                                # lowest step stays lit
 print(max(1, round(Y(l) * mx)), round(l))
-' "$cur" "$max" "$step" "$dir")
+' "$cur" "$max" "$step" "$dir" "$internal")
   qdbus6 $SB "$disp" org.kde.ScreenBrightness.Display.SetBrightness "$raw" 1 >/dev/null 2>&1
   qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$level" >/dev/null 2>&1
-  logger -t brightness-here "$out $dir: raw $cur -> $raw/$max (L* $level)"
+  logger -t brightness-here "$out $dir: $cur -> $raw/$max (level $level)"
   exit 0
 fi
 
+# Not known to ScreenBrightness: KWin's own per-output brightness, if it has one.
 kwin_level() {
   kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$out" '
     /^Output:/ { name = $3 }
     name == o && /Brightness control/ { if (match($0, /set to [0-9]+%/)) { print substr($0, RSTART + 7, RLENGTH - 8); exit } }'
 }
-
-# External monitor with DDC/CI: its own backlight and contrast together (ddc-level), at full signal.
-ddc=$(command -v ddc-level || echo "$HOME/.local/bin/ddc-level")
-if [ -x "$ddc" ] && level=$("$ddc" "$out" "$dir" "$step" 2>/dev/null) && [ -n "$level" ]; then
-  # KWin's software dimming lowers the signal itself (fewer grey levels): keep it off here.
-  sw=$(kwin_level); [ -n "$sw" ] && [ "$sw" != 100 ] && kscreen-doctor "output.$out.brightness.100" >/dev/null 2>&1
-  qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$level" >/dev/null 2>&1
-  logger -t brightness-here "$out $dir: DDC level $level"
-  exit 0
-fi
 
 cur=$(kwin_level)
 [ -n "$cur" ] || exit 1

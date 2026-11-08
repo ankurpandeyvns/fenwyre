@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the dock and popups (Control Center etc.) on one glass tint, and the menu bar clear.
+"""macOS 27 Liquid Glass tints for the dock, popups (Control Center etc.) and the menu bar.
 
 KWin's blur strength is global; what makes surfaces look different is each SVG's tint layer.
 For each theme below, the tint of the panel and dialog backgrounds' "center" element (and every
@@ -11,11 +11,21 @@ import gzip, re, shutil
 from pathlib import Path
 
 THEMES = Path.home() / ".local/share/plasma/desktoptheme"
-GLASS = ("0.45", "#000000")  # popups, dock; both WhiteSur variants use white text
-CLEAR = ("0.35", "#000000")     # menu bar: a light veil so white text stays readable on bright wallpapers
-# (svg, tint): the top bars are set to "opaque" so they use solid/ (no blur), made fully clear here
-TINTS = [("widgets/panel-background.svgz", GLASS), ("dialogs/background.svgz", GLASS),
+# The refraction, specular rim and blur come from the KWin "glass" effect (system/glass); these SVG
+# layers only tint it. macOS 27 at the default Liquid Glass setting: the dock is nearly clear, menus
+# and Control Center are tinted more, the menu bar has no background. Both WhiteSur variants use white text.
+DOCK = ("0.18", "#000000")
+MENU = ("0.38", "#000000")      # popups, Control Center; Spotlight (net.local.spotlight) uses the same
+CLEAR = ("0.12", "#000000")     # menu bar: a faint veil so white text stays readable on bright wallpapers
+# (svg, tint): the top bars are set to "opaque" so they use solid/ (no blur)
+TINTS = [("widgets/panel-background.svgz", DOCK), ("dialogs/background.svgz", MENU),
          ("solid/widgets/panel-background.svgz", CLEAR)]
+# WhiteSur outlines the floating dock in solid black with a faint white inner line; Liquid Glass has a
+# light hairline rim instead (the effect adds the specular highlight on top).
+RIM = {"widgets/panel-background.svgz": [
+    ("opacity:1;fill:#000000;stroke-width:0.25", "opacity:0.22;fill:#ffffff;stroke-width:0.25"),
+    ('style="opacity:1;fill:#000000"', 'style="opacity:0.22;fill:#ffffff"'),
+    ("opacity:0.1;fill:#ffffff", "opacity:0;fill:#ffffff")]}
 THEME_NAMES = ["WhiteSur-dark", "WhiteSur"]
 BACKUP = Path.home() / "kde-pre-mac-backup/glass-sync"
 changed = False
@@ -41,6 +51,8 @@ for theme in THEME_NAMES:
                 if bare:
                     tag = m.group(0)
                     new = new.replace(tag, tag.replace(style, style.replace(bare.group(0), target)), 1)
+        for a, b in RIM.get(rel, []):
+            new = new.replace(a, b)
         if new == s:
             continue
         b = BACKUP / theme / rel
@@ -53,3 +65,26 @@ for theme in THEME_NAMES:
 if changed:
     for c in (Path.home() / ".cache").glob("plasma_theme_WhiteSur*.kcache"):
         c.unlink()
+
+
+# Menu-bar popups (Mac Stats, Control Center, battery, clock...) should be glass too, but Plasma gives
+# every popup of an opaque panel a solid, unblurred background (CompactApplet.qml), and the menu bars
+# are opaque so they stay clear. Keep a user copy of the desktop shell package, mirrored from the
+# system one at every login (so Plasma updates are picked up), with only that line changed. If the
+# line is gone in a new Plasma, the copy is removed and the stock shell is used.
+SHELL_SRC = Path("/usr/share/plasma/shells/org.kde.plasma.desktop")
+SHELL_DST = Path.home() / ".local/share/plasma/shells/org.kde.plasma.desktop"
+OPAQUE_POPUP = ("(Plasmoid.containmentDisplayHints & PlasmaCore.Types.ContainmentPrefersOpaqueBackground)"
+                " ? PlasmaCore.AppletPopup.SolidBackground : PlasmaCore.AppletPopup.StandardBackground")
+applet = SHELL_SRC / "contents/applet/CompactApplet.qml"
+if applet.exists() and OPAQUE_POPUP in applet.read_text():
+    tmp = SHELL_DST.with_name(SHELL_DST.name + ".new")
+    shutil.rmtree(tmp, ignore_errors=True)
+    shutil.copytree(SHELL_SRC, tmp)
+    qml = tmp / "contents/applet/CompactApplet.qml"
+    qml.write_text(qml.read_text().replace(OPAQUE_POPUP, "PlasmaCore.AppletPopup.StandardBackground"))
+    shutil.rmtree(SHELL_DST, ignore_errors=True)
+    tmp.rename(SHELL_DST)
+elif SHELL_DST.exists():
+    shutil.rmtree(SHELL_DST)
+    print("glass popups: CompactApplet.qml changed upstream, using the stock shell")

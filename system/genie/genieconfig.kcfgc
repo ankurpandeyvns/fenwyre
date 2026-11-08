@@ -1,0 +1,5 @@
+File=genie.kcfg
+ClassName=GenieConfig
+NameSpace=KWin
+Singleton=true
+Mutators=true

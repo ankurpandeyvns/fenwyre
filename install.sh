@@ -29,8 +29,8 @@ svc() { for f in "$@"; do put "$HERE/systemd/user/$f" "$HOME/.config/systemd/use
 # ------------------------------------------------------------------ features (what the user chooses from)
 # id | group | title | description | sudo(yes/no)
 FEATURES='
-themes|Look|macOS themes + glass|Light/Dark global themes that keep the macOS look, traffic lights on the left, one glass tint for bar, popups and Spotlight|no
-menubar|Look|macOS menu bar|Mac Stats (CPU/MEM/GPU/net), battery, Sound (headphones-aware), Control Center, "Nov 8  3:04 AM" clock, no tray chevron|no
+themes|Look|macOS themes + Liquid Glass|Light/Dark global themes that keep the macOS look, traffic lights on the left, genie minimize into the dock; macOS 27 Liquid Glass (refraction, specular rim) on the dock, popups and Spotlight via the KWin Glass effect, clear menu bar|yes
+menubar|Look|macOS menu bar|Mac Stats (CPU/MEM/GPU/net), battery, Sound (headphones-aware), Control Center, "Nov 8  3:04 AM" clock, no tray chevron|yes
 lockscreen|Look|Live wallpaper + lock screen|Macintosh live wallpaper on desktop and lock screen, glass stencil clock, unlock eases into the desktop (next login); SDDM login form on the main display only, monitor layout synced, only Plasma offered|yes
 hud|Look|Volume/brightness HUD|macOS 27.2 glass capsule under the menu bar, outlined glyph, 16-segment level|no
 cmdkeys|Keyboard|Cmd/Ctrl swap|Cmd+C/V/W/Q/Tab work like macOS (XKB swap of Super and Ctrl)|no
@@ -149,11 +149,66 @@ unit_themesettings() {
     kw --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight ""
     kw --file kdeglobals --group KDE --key DefaultLightLookAndFeel net.local.macos.light
     kw --file kdeglobals --group KDE --key DefaultDarkLookAndFeel net.local.macos.dark
+    # Dock genie (~0.45 s like macOS): macgenie (system/genie, root) is KWin's Magic Lamp aimed at the dock
+    # on the window's own screen; stock Magic Lamp if it can't be built (it may pick another screen's dock).
+    local fx=magiclamp
+    if "$HERE/system/genie/build-effect"; then fx=macgenie; else echo "macgenie not built: using Magic Lamp"; fi
+    kw --file kwinrc --group Plugins --key squashEnabled false
+    kw --file kwinrc --group Plugins --key magiclampEnabled "$([ $fx = magiclamp ] && echo true || echo false)"
+    kw --file kwinrc --group Plugins --key macgenieEnabled "$([ $fx = macgenie ] && echo true || echo false)"
+    kw --file kwinrc --group Effect-magiclamp --key AnimationDuration 450
+    kw --file kwinrc --group Effect-genie --key AnimationDuration 450
+    local e; for e in squash magiclamp macgenie; do
+        [ $e = $fx ] || qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect $e >/dev/null 2>&1 || true
+    done
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect $fx >/dev/null 2>&1 || true
 }
 unit_glass() {
-    say "one glass tint for bar, popups and Spotlight (re-applied at login)"
+    say "macOS 27 Liquid Glass: KWin Glass effect (root) + tints for dock, popups, Spotlight (re-applied at login)"
     bin plasma-sync-glass; svc plasma-sync-glass.service
     systemctl --user enable plasma-sync-glass.service; "$BIN/plasma-sync-glass" || true
+    "$HERE/system/glass/build-effect" || { echo "Glass effect not built: keeping KWin's blur"; return 0; }
+    backup "$HOME/.config/kwinrc"
+    local k v
+    # Values matched to macOS 27 screenshots: clear dock with lensing only at the bevel, light hairline
+    # rim with a specular highlight. Blacklist mode with an empty list, so every surface that asks for
+    # blur gets glass (whitelist mode with an empty list blurs nothing at all); BlurDocks=false, or the
+    # menu bars get force-blurred and visibly warped by the refraction.
+    while read -r k v; do kw --file kwinrc --group Effect-blurplus --key "$k" "$v"; done <<'EOF'
+BlurNonMatching true
+BlurMatching false
+BlurDocks false
+BlurMenus true
+TransparentBlur true
+BlurStrength 6
+DockBlurStrength 2
+NoiseStrength 0
+Saturation 1.2
+RefractionStrength 9
+RefractionEdgeSize 3
+RefractionNormalPow 3
+RefractionRGBFringing 1
+RefractionOffsetStrength 8
+RefractionBevelIntensity 12
+PhysicallyBasedRefraction true
+EdgeLighting false
+RimSpecular true
+RimSpecularTopLeft true
+RimSpecularTopRight true
+RimSpecularBottomLeft true
+RimSpecularBottomRight true
+RimWidth 12
+RimSpecularScale 8
+UseDeclaredCornerRadius true
+MenuCornerRadius 12
+DockCornerRadius 22
+EOF
+    kw --file kwinrc --group Plugins --key blurEnabled false
+    kw --file kwinrc --group Plugins --key glassEnabled true
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect blur >/dev/null 2>&1 || true
+    qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect glass >/dev/null 2>&1 || true
+    # The dock stays glass over maximized windows (Plasma's "adaptive" swaps in the solid SVG).
+    plasma_js 'panels().forEach(function(p){ if (p.location == "bottom") p.opacity = "translucent"; })' >/dev/null 2>&1 || true
 }
 unit_cmdswap() {
     say "Cmd/Ctrl swap"
@@ -235,8 +290,26 @@ unit_mxkeys() {
 }
 unit_brightness() {
     say "brightness keys for the display under the mouse"
-    bin brightness-here brightness-here-repeat ddc-level; svc brightness-here-repeat.service
+    bin brightness-here brightness-here-repeat ddc-level ddc-rescan; svc brightness-here-repeat.service; svc ddc-rescan.service
     systemctl --user enable --now brightness-here-repeat.service
+    systemctl --user enable ddc-rescan.service   # at login: PowerDevil picks up monitors that came up late
+    # One source of truth: KWin owns every display's level (DDC/CI for external monitors) and the keys go
+    # through KDE's ScreenBrightness service, like the tray slider. Make sure KWin's DDC/CI is on.
+    local o
+    for o in $(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/^Output:/ { print $3 }'); do
+        case "$o" in eDP*|LVDS*|DSI*) ;; *) kscreen-doctor "output.$o.ddcCi.allow" >/dev/null 2>&1 ;; esac
+    done
+    # PowerDevil writes every intermediate slider/key value over DDC/CI; on a slow link the monitor lags
+    # seconds behind. Preload system/ddc-coalesce so only the newest value is sent, and skip read-back.
+    mkdir -p "$HOME/.local/lib" "$HOME/.config/systemd/user/plasma-powerdevil.service.d" "$HOME/.config/ddcutil"
+    if cc -O2 -shared -fPIC -o "$HOME/.local/lib/libddc-coalesce.so" "$HERE/system/ddc-coalesce/ddc-coalesce.c" -ldl -lpthread; then
+        printf '%s\n' '# kde-macos-parity: send only the newest DDC/CI brightness value (system/ddc-coalesce).' '[Service]' \
+            'Environment=LD_PRELOAD=%h/.local/lib/libddc-coalesce.so' \
+            > "$HOME/.config/systemd/user/plasma-powerdevil.service.d/ddc-coalesce.conf"
+        systemctl --user daemon-reload
+        systemctl --user try-restart plasma-powerdevil.service
+    fi
+    [ -e "$HOME/.config/ddcutil/ddcutilrc" ] || printf '%s\n' '[libddcutil]' 'options: --noverify' > "$HOME/.config/ddcutil/ddcutilrc"
 }
 unit_audio() {
     say "Bluetooth audio: LDAC adaptive (no skips on radio dips); Sony EQ filter (targets the MAC in the file)"
@@ -354,7 +427,7 @@ resolve() {   # sets SELECTED and RUN (ordered units); fails on unknown ids befo
 plan() {
     resolve "$@"
     echo "features: ${SELECTED[*]}"; echo "units:    ${RUN[*]}"
-    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|trim|appledrm|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
+    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|trim|appledrm|netfeed|sffont|loginscreen|glass|themesettings) s=yes ;; esac; done; echo "sudo:     $s"
 }
 apply() {
     resolve "$@"
