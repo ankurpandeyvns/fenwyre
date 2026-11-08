@@ -1,0 +1,24 @@
+#!/bin/sh
+# Turn the keyboard backlight off while all connected displays are powered off (DPMS),
+# restore it when any display comes back on.
+LED=/sys/class/leds/kbd_backlight/brightness
+saved=""
+all_off() {
+  found=0
+  for c in /sys/class/drm/card*-*; do
+    [ "$(cat "$c/status" 2>/dev/null)" = connected ] || continue
+    found=1
+    [ "$(cat "$c/dpms" 2>/dev/null)" = Off ] || return 1
+  done
+  [ $found = 1 ]
+}
+while :; do
+  if all_off; then
+    if [ -z "$saved" ]; then
+      saved=$(cat "$LED"); [ "$saved" -gt 0 ] && echo 0 > "$LED" || saved=""
+    fi
+  elif [ -n "$saved" ]; then
+    echo "$saved" > "$LED"; saved=""
+  fi
+  sleep 1
+done

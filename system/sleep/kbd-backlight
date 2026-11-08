@@ -1,0 +1,9 @@
+#!/bin/sh
+# Turn keyboard backlight off during sleep (leds_pwm doesn't do it on Apple Silicon)
+LED=/sys/class/leds/kbd_backlight
+STATE=/run/kbd-backlight.saved
+[ -w "$LED/brightness" ] || exit 0
+case "$1" in
+  pre)  cat "$LED/brightness" > "$STATE"; echo 0 > "$LED/brightness" ;;
+  post) [ -f "$STATE" ] && cat "$STATE" > "$LED/brightness" && rm -f "$STATE" ;;
+esac

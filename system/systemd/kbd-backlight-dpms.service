@@ -1,0 +1,9 @@
+[Unit]
+Description=Turn keyboard backlight off when displays are off
+
+[Service]
+ExecStart=/usr/local/bin/kbd-backlight-dpms
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

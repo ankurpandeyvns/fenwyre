@@ -40,7 +40,7 @@ quicklook|Keyboard|Quick Look (Space)|Space previews files in Dolphin and on the
 konsole|Apps|Terminal profile|Konsole "Mac" profile with Source Code Pro for Powerline as the default|no
 helium|Apps|Helium hardware video|VA-API decode on Apple silicon (H.264/VP9) and an extension that hides AV1 so YouTube uses hardware decode|no
 mxkeys|Apps|Logitech Mac mode|Switch Logitech keyboards (MX Keys) to macOS layout at login and on every reconnect (Solaar)|no
-brightness|Apps|Brightness keys, ProMotion + DDC|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%); adaptive refresh on the built-in display; Asahi: DDC/CI to external monitors and HDMI back after sleep (patched display driver, next boot)|yes
+brightness|Apps|Brightness keys, ProMotion + DDC|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%); adaptive refresh on the built-in display; keyboard backlight off while the displays are off or asleep; Asahi: DDC/CI to external monitors and HDMI back after sleep (patched display driver, next boot)|yes
 battery|System|Battery, fans + SSD TRIM|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max); TRIM through the encrypted root (next boot)|yes
 audio|System|Bluetooth audio|LDAC adaptive bitrate (no skipping; hq option in the file); Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
 netstats|System|Per-app network/GPU + SF font|Root feeds for Mac Stats per-app network (packet capture) and GPU (scheduler tracepoints); SF Pro preferred over other sans fonts|yes
@@ -59,7 +59,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
         konsole)     echo konsole ;;
         helium)      echo helium ;;
         mxkeys)      echo mxkeys ;;
-        brightness)  echo brightness vrr appledrm ;;
+        brightness)  echo brightness vrr kbdlight appledrm ;;
         battery)     echo battery fans trim ;;
         audio)       echo audio ;;
         netstats)    echo netfeed sffont ;;
@@ -69,7 +69,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
 }
 # Execution order for units (shared pieces first, panel layout and plasmashell restart last).
 ORDER=(packages bin_stats blur osd volume_sound lockscreen lockwallpaper loginscreen themesettings glass cmdswap krunner shots
-       quicklook konsole helium mxkeys brightness vrr appledrm audio windows battery fans trim netfeed sffont layout restart)
+       quicklook konsole helium mxkeys brightness vrr kbdlight appledrm audio windows battery fans trim netfeed sffont layout restart)
 
 # ------------------------------------------------------------------ units
 unit_packages() {   # Plasma packages are inert until used: widgets, global themes, wallpaper
@@ -330,6 +330,15 @@ unit_battery() {
     sudo install -Dm644 "$HERE/system/systemd/battery-limit.service.d/save-on-stop.conf" /etc/systemd/system/battery-limit.service.d/save-on-stop.conf
     sudo systemctl daemon-reload; sudo systemctl enable --now battery-limit.service
 }
+unit_kbdlight() {
+    say "root: keyboard backlight off while the displays are off or the Mac sleeps"
+    [ -e /sys/class/leds/kbd_backlight/brightness ] || { echo "no kbd_backlight LED, skipping"; return 0; }
+    # leds_pwm (Apple Silicon) keeps the LED lit through s2idle and KDE leaves it on when the screens turn off.
+    sudo install -m755 "$HERE/system/sleep/kbd-backlight" /usr/lib/systemd/system-sleep/kbd-backlight
+    sudo install -m755 "$HERE/system/bin/kbd-backlight-dpms" /usr/local/bin/kbd-backlight-dpms
+    sudo install -m644 "$HERE/system/systemd/kbd-backlight-dpms.service" /etc/systemd/system/kbd-backlight-dpms.service
+    sudo systemctl daemon-reload; sudo systemctl enable --now kbd-backlight-dpms.service
+}
 unit_appledrm() {
     say "root: patched display driver for $(uname -r) (DDC/CI on external monitors, HDMI after sleep)"
     [ -f "/usr/lib/modules/$(uname -r)/kernel/drivers/gpu/drm/apple/appledrm.ko" ] ||
@@ -427,7 +436,7 @@ resolve() {   # sets SELECTED and RUN (ordered units); fails on unknown ids befo
 plan() {
     resolve "$@"
     echo "features: ${SELECTED[*]}"; echo "units:    ${RUN[*]}"
-    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|trim|appledrm|netfeed|sffont|loginscreen|glass|themesettings) s=yes ;; esac; done; echo "sudo:     $s"
+    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|trim|appledrm|kbdlight|netfeed|sffont|loginscreen|glass|themesettings) s=yes ;; esac; done; echo "sudo:     $s"
 }
 apply() {
     resolve "$@"

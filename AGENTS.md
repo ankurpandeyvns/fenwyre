@@ -118,6 +118,9 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   locks: `kreadconfig6 --file kglobalshortcutsrc --group ksmserver --key "Lock Session"` lists `Meta+Ctrl+Q`.
 - **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
   `kscreen-doctor -o` shows `Vrr: Always` on the built-in display (eDP).
+  Keyboard backlight (`kbdlight` unit): `systemctl is-active kbd-backlight-dpms`; turn the screens off (power key set
+  to "turn off screen") and `cat /sys/class/leds/kbd_backlight/brightness` reads 0, back to the old level on wake;
+  `sudo /usr/lib/systemd/system-sleep/kbd-backlight pre suspend` sets 0 and `... post suspend` restores it.
   Display driver (Asahi, `appledrm` unit, next boot): `modinfo -n appledrm` is under `updates/`; the kernel log has
   `DDC: i2c-N` for each external DCP; `ddcutil detect` lists the external monitors and `ddcutil -b N getvcp 10`
   reads brightness (first try only `getvcp`; `setvcp` after that works). Brightness keys on an external then log
