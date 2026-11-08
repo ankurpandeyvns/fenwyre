@@ -9,6 +9,11 @@ Overlapping jobs split the elapsed time between them. It traces SAMPLE s of ever
 (about 3000 events/s on a busy desktop; tracing all the time costs ~8% of a core) and writes
 /run/mac-stats/gpu.json: {"t": epoch, "procs": [[pid, share], ...]}, share = fraction of the
 GPU time traced in that window (sums to 1). Only PIDs and shares are written.
+
+It also writes "work": GPU load as a share of full capacity. Busy time alone overstates it: the GPU
+idles at its lowest clock (388 of 1296 MHz on M1 Max), where 30% busy is ~9% of what it can do. The
+clock changes many times a second, so busy_ns and pstate are sampled every 50 ms and each slice of
+busy time is weighted by that slice's clock / max clock.
 """
 import json, os, re, select, signal, sys, time
 
@@ -18,6 +23,9 @@ TRACING = "/sys/kernel/tracing"
 INST = os.path.join(TRACING, "instances", "mac_stats_gpu")
 EVENTS = ("drm_sched_job_queue", "drm_sched_job_run", "drm_sched_job_done")
 PERIOD = 2.0
+TICK = 0.05
+AGX = "/sys/class/drm/card1/device/agx_stats"
+OPP = "/sys/firmware/devicetree/base/opp-table-gpu"
 SAMPLE = 1.0
 LINE = re.compile(rb"^\s*.+?-(\d+)\s+\[\d+\]\s+\S+\s+(\d+\.\d+): drm_sched_job_(queue|run|done): .*?fence=(\d+):(\d+)")
 
@@ -63,12 +71,56 @@ def tgid(tid):
     return pid
 
 
-def write(shares):
+def gpu_freqs():
+    """pstate index -> MHz (pstate 0 = off)."""
+    try:
+        names = sorted(n for n in os.listdir(OPP) if n.startswith("opp"))
+        return [int.from_bytes(open(os.path.join(OPP, n, "opp-hz"), "rb").read()[:8], "big") / 1e6 for n in names]
+    except OSError:
+        return []
+
+
+def agx():
+    try:
+        d = dict(l.split() for l in open(AGX))
+        return int(d["busy_ns"]), int(d["pstate"])
+    except (OSError, KeyError, ValueError):
+        return None
+
+
+class Work:
+    """Busy time weighted by clock / max clock, accumulated per write period."""
+    def __init__(self):
+        self.freqs = gpu_freqs()
+        self.fmax = max(self.freqs) if self.freqs else 0
+        self.prev = agx()
+        self.acc = self.busy = 0.0
+        self.t0 = time.monotonic()
+
+    def tick(self):
+        cur = agx()
+        if cur and self.prev and self.fmax and cur[0] >= self.prev[0]:
+            d = cur[0] - self.prev[0]
+            ps = max(cur[1], self.prev[1])          # the clock during the slice: the higher end
+            f = self.freqs[ps] if 0 <= ps < len(self.freqs) else self.fmax
+            self.acc += d * f / self.fmax
+            self.busy += d
+        self.prev = cur
+
+    def take(self):
+        now = time.monotonic(); dt = max(1e-3, now - self.t0)
+        out = (min(100.0, 100 * self.acc / (dt * 1e9)), min(100.0, 100 * self.busy / (dt * 1e9)))
+        self.acc = self.busy = 0.0; self.t0 = now
+        return out if self.fmax else (None, None)
+
+
+def write(shares, work=None, busy=None):
     tot = sum(shares.values())
     procs = sorted(([p, round(v / tot, 4)] for p, v in shares.items() if v > 0), key=lambda x: -x[1]) if tot else []
     tmp = OUT + ".tmp"
     with open(tmp, "w") as f:
-        json.dump({"t": time.time(), "procs": procs[:20]}, f)
+        json.dump({"t": time.time(), "procs": procs[:20],
+                   "work": None if work is None else round(work, 2), "busy": None if busy is None else round(busy, 2)}, f)
     os.chmod(tmp, 0o644)
     os.replace(tmp, OUT)
 
@@ -88,6 +140,8 @@ def main():
     inflight = {}                # (context, seqno) -> context
     shares, last, buf = {}, None, b""
     fd = os.open(os.path.join(INST, "trace_pipe"), os.O_RDONLY | os.O_NONBLOCK)
+    work = Work()
+    tick = time.monotonic() + TICK
     start = time.monotonic()
     stop, due, tracing = start + SAMPLE, start + PERIOD, True
     events(True)
@@ -96,8 +150,11 @@ def main():
         if tracing and now >= stop:
             events(False)
             tracing = False
-        wake = stop if tracing else due
-        r, _, _ = select.select([fd], [], [], max(0.02, wake - now))
+        if now >= tick:
+            work.tick()
+            tick = now + TICK
+        wake = min(stop if tracing else due, tick)
+        r, _, _ = select.select([fd], [], [], max(0.005, wake - now))
         if r:
             try:
                 chunk = os.read(fd, 1 << 16)
@@ -129,7 +186,8 @@ def main():
                 inflight.clear()
         if not tracing and not r and time.monotonic() >= due:
             shares.pop(0, None)
-            write(shares)
+            work.tick()
+            write(shares, *work.take())
             shares, last, buf = {}, None, b""
             inflight.clear()             # their done events fell in the gap
             stop, due, tracing = due + SAMPLE, due + PERIOD, True

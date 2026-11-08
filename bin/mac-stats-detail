@@ -377,7 +377,14 @@ def sample():
         jobs = max(0, (g.get("jobs", 0) - pg["jobs"]) / dt) if dt and "jobs" in pg else 0
         fr = gpu_freqs()
         ps = g.get("pstate", 0)
-        gpu = {"util": round(util, 1), "power": round(g.get("power_mw", 0) / 1000, 2),
+        # "util" is load vs full capacity: busy time weighted by the clock it ran at (gpu-feed samples
+        # this every 50 ms). Busy time alone reads 30% when the GPU idles busy at its lowest clock.
+        busy = util
+        if gf and now - gf.get("t", 0) < 6 and gf.get("work") is not None:
+            util = gf["work"]
+        elif fr and 0 <= ps < len(fr) and max(fr):
+            util = util * fr[ps] / max(fr)
+        gpu = {"util": round(util, 1), "busy": round(busy, 1), "power": round(g.get("power_mw", 0) / 1000, 2),
                "pstate": ps, "mhz": fr[ps] if 0 <= ps < len(fr) else None,
                "maxMhz": max(fr) if fr else None, "jobs": round(jobs),
                "mem": g.get("user_resident", 0) + g.get("kernel_resident", 0),

@@ -187,3 +187,7 @@
   `WaylandOverlayDelegation` made no measurable difference (4.8% vs 5.0%), so it is not enabled. A maximized YouTube
   tab on eDP (3456x2176 px at 120 Hz) cost ~35%; pausing the YouTube renderer halved it, i.e. page work (Ambient mode
   glow, UI) rather than decoding. KWin's `KWIN_USE_OVERLAYS` (opt-in, needs a new login) is untested on Apple DCP.
+- GPU "%": `busy_ns` is busy time at whatever clock the GPU runs, and asahi idles it at the lowest pstate (388 of
+  1296 MHz), so a light desktop reads ~30% busy. The firmware's `util1..4` are the same kind of number (DVFS load
+  at the current clock). Mac Stats shows **Load** = busy time weighted by clock / max clock, sampled every 50 ms by
+  gpu-feed (the clock changes many times a second; one sample per 2 s is wrong). Raw busy stays as "Busy time".

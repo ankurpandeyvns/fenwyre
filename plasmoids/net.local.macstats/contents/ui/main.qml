@@ -674,7 +674,7 @@ PlasmoidItem {
                 RowLayout {
                     ColumnLayout {
                         spacing: 0
-                        PlasmaComponents.Label { text: "Utilization"; opacity: 0.7; font.family: "SF Pro Text" }
+                        PlasmaComponents.Label { text: "Load"; opacity: 0.7; font.family: "SF Pro Text" }
                         Big { text: root.gpu.toFixed(0) + "%" }
                     }
                     Item { Layout.fillWidth: true }
@@ -687,7 +687,7 @@ PlasmoidItem {
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 4
                     AreaGraph { anchors.fill: parent; anchors.margins: 1; series: [root.hGpu]; colors: [root.cGpu]
-                        HoverReadout { count: root.hGpu.length; describe: i => [["GPU busy", (root.hGpu[i] || 0).toFixed(0) + "%", root.cGpu]] } }
+                        HoverReadout { count: root.hGpu.length; describe: i => [["GPU load", (root.hGpu[i] || 0).toFixed(0) + "%", root.cGpu]] } }
                 }
                 Frame {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -698,6 +698,7 @@ PlasmoidItem {
                         HoverReadout { count: root.hGpuPower.length; describe: i => [["GPU power", (root.hGpuPower[i] || 0).toFixed(2) + " W", root.cComp]] }
                     }
                 }
+                Row2 { k: "Busy time"; v: root.g && root.g.busy !== undefined ? root.g.busy.toFixed(0) + "% at this clock" : "–" }
                 Row2 { k: "Frequency"; v: root.g && root.g.mhz !== null ? root.g.mhz + " MHz" + (root.g.maxMhz ? "  of " + root.g.maxMhz : "") : "–" }
                 RowLayout {
                     Layout.fillWidth: true
