@@ -40,9 +40,23 @@ print(max(1, round(Y(l) * mx)), round(l))
   exit 0
 fi
 
-cur=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$out" '
-  /^Output:/ { name = $3 }
-  name == o && /Brightness control/ { if (match($0, /set to [0-9]+%/)) { print substr($0, RSTART + 7, RLENGTH - 8); exit } }')
+kwin_level() {
+  kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk -v o="$out" '
+    /^Output:/ { name = $3 }
+    name == o && /Brightness control/ { if (match($0, /set to [0-9]+%/)) { print substr($0, RSTART + 7, RLENGTH - 8); exit } }'
+}
+
+# External monitor with DDC/CI: its own backlight and contrast together (ddc-level), at full signal.
+ddc=$(command -v ddc-level || echo "$HOME/.local/bin/ddc-level")
+if [ -x "$ddc" ] && level=$("$ddc" "$out" "$dir" "$step" 2>/dev/null) && [ -n "$level" ]; then
+  # KWin's software dimming lowers the signal itself (fewer grey levels): keep it off here.
+  sw=$(kwin_level); [ -n "$sw" ] && [ "$sw" != 100 ] && kscreen-doctor "output.$out.brightness.100" >/dev/null 2>&1
+  qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged "$level" >/dev/null 2>&1
+  logger -t brightness-here "$out $dir: DDC level $level"
+  exit 0
+fi
+
+cur=$(kwin_level)
 [ -n "$cur" ] || exit 1
 if [ "$dir" = up ]; then new=$((cur + step)); else new=$((cur - step)); fi
 [ "$new" -gt 100 ] && new=100

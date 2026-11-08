@@ -101,7 +101,8 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   `kscreen-doctor -o` shows `Vrr: Always` on the built-in display (eDP).
   Display driver (Asahi, `appledrm` unit, next boot): `modinfo -n appledrm` is under `updates/`; the kernel log has
   `DDC: i2c-N` for each external DCP; `ddcutil detect` lists the external monitors and `ddcutil -b N getvcp 10`
-  reads brightness (first try only `getvcp`; `setvcp` after that works). After `systemctl suspend` and wake with the
+  reads brightness (first try only `getvcp`; `setvcp` after that works). Brightness keys on an external then log
+  `DDC level N` (`journalctl --user -t brightness-here`); `ddcutil -b N getvcp 10 12` follows `bin/ddc-level`'s curve. After `systemctl suspend` and wake with the
   HDMI cable plugged in, the log shows `DP2HDMI: display still attached after system sleep, reconnecting` and the
   display comes back. If DDC misbehaves: `echo 0 | sudo tee /sys/module/appledrm/parameters/ddc`. After a kernel
   update, rerun `system/display/build-module` (it finds the kernel's linux-aurora commit by itself).

@@ -235,7 +235,7 @@ unit_mxkeys() {
 }
 unit_brightness() {
     say "brightness keys for the display under the mouse"
-    bin brightness-here brightness-here-repeat; svc brightness-here-repeat.service
+    bin brightness-here brightness-here-repeat ddc-level; svc brightness-here-repeat.service
     systemctl --user enable --now brightness-here-repeat.service
 }
 unit_audio() {

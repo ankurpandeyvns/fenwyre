@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""ddc-level: one brightness level per external monitor, applied as backlight + contrast over DDC/CI.
+
+  ddc-level OUTPUT up|down STEP    change the level of the monitor on KWin output OUTPUT; prints the
+                                   new level (0..100) for the HUD, exit 1 if the output has no DDC
+  ddc-level OUTPUT get             print the level
+
+Like BetterDisplay's combined brightness, the level drives two controls together:
+  backlight (VCP 0x10)  0 .. max, linear in the level: it carries the brightness.
+  contrast  (VCP 0x12)  rises with the level up to KNEE and then holds at the monitor's own
+                        contrast. Below KNEE it eases down (smoothstep) to C_FLOOR of it, which dims
+                        further than the backlight alone can, without crushing the image.
+Contrast never goes above the monitor's own setting (the value it had when ddc-level first saw it,
+or what you set in its menu since): above that, whites clip and gradients band.
+
+DDC writes take ~50-200 ms. The key handler only records the step and starts one writer (flock) that
+sends the latest target, so held keys don't queue up. After a minute without changes the writer reads
+the monitor again first, so changes from its buttons or PowerDevil are picked up.
+State: ~/.local/state/fenwyre/ddc.json.
+"""
+import fcntl, glob, hashlib, json, os, subprocess, sys, time
+
+C_FLOOR = 0.70      # contrast at level 0, of the monitor's own contrast
+KNEE = 60.0         # level from which contrast stays at the monitor's own value
+RESYNC_S = 60       # re-read the monitor after this long without a change
+STATE_DIR = os.path.join(os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "fenwyre")
+STATE = os.path.join(STATE_DIR, "ddc.json")
+LOCK = os.path.join(STATE_DIR, "ddc.lock")
+WRITER_LOCK = os.path.join(STATE_DIR, "ddc-writer.lock")
+DRYRUN = os.environ.get("DDC_LEVEL_DRYRUN")     # tests: print ddcutil commands, fake the monitor
+
+I2C_RDWR, I2C_M_RD = 0x0707, 0x0001
+
+
+def targets(level, bmax, cmax, ref):
+    """level 0..100 -> (backlight, contrast)."""
+    b = round(bmax * level / 100)
+    s = min(1.0, max(0.0, level / KNEE))
+    s = s * s * (3 - 2 * s)
+    c = round(min(ref, cmax) * (C_FLOOR + (1 - C_FLOOR) * s))
+    return b, c
+
+
+# ---------------------------------------------------------------- monitor lookup
+def sysfs_edid(out):
+    for p in glob.glob(f"/sys/class/drm/card*-{out}/edid"):
+        try:
+            d = open(p, "rb").read()
+        except OSError:
+            continue
+        if len(d) >= 128:
+            return d[:128], os.path.dirname(p)
+    return None, None
+
+
+def i2c_edid(bus):
+    """128 EDID bytes from 0x50 on /dev/i2c-BUS (write offset 0, read)."""
+    import ctypes
+    class Msg(ctypes.Structure):
+        _fields_ = [("addr", ctypes.c_uint16), ("flags", ctypes.c_uint16), ("len", ctypes.c_uint16),
+                    ("buf", ctypes.POINTER(ctypes.c_uint8))]
+    class Data(ctypes.Structure):
+        _fields_ = [("msgs", ctypes.POINTER(Msg)), ("nmsgs", ctypes.c_uint32)]
+    off = (ctypes.c_uint8 * 1)(0)
+    buf = (ctypes.c_uint8 * 128)()
+    msgs = (Msg * 2)(Msg(0x50, 0, 1, off), Msg(0x50, I2C_M_RD, 128, buf))
+    try:
+        fd = os.open(f"/dev/i2c-{bus}", os.O_RDWR)
+    except OSError:
+        return None
+    try:
+        fcntl.ioctl(fd, I2C_RDWR, Data(msgs, 2))
+        return bytes(buf)
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
+def ddc_buses(conn_dir):
+    """Candidate DDC buses: the connector's own ddc link, else adapters named for DDC (never SoC SMBus)."""
+    link = os.path.join(conn_dir, "ddc")
+    if os.path.exists(link):
+        return [int(os.path.basename(os.path.realpath(link)).split("-")[1])]
+    out = []
+    for n in glob.glob("/sys/bus/i2c/devices/i2c-*/name"):
+        try:
+            name = open(n).read()
+        except OSError:
+            continue
+        if "DDC" in name or "ddc" in name:
+            out.append(int(n.split("/")[-2].split("-")[1]))
+    return sorted(out)
+
+
+def find_bus(out, st):
+    edid, conn = sysfs_edid(out)
+    if edid is None:
+        return None, None
+    key = hashlib.sha1(edid).hexdigest()[:16]
+    if DRYRUN:
+        return 99, key
+    cached = st.get("bus", {}).get(key)
+    if cached is not None and i2c_edid(cached) == edid:
+        return cached, key
+    for bus in ddc_buses(conn):
+        if i2c_edid(bus) == edid:
+            st.setdefault("bus", {})[key] = bus
+            return bus, key
+    return None, key
+
+
+# ---------------------------------------------------------------- ddcutil
+def ddcutil(bus, *args):
+    cmd = ["ddcutil", "-b", str(bus), "--noverify", *args]
+    if DRYRUN:
+        print("DRYRUN", " ".join(cmd), file=sys.stderr)
+        if args[0] == "getvcp":
+            return "VCP 10 C 40 100\nVCP 12 C 75 100\n"
+        return ""
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+    if r.returncode:
+        raise RuntimeError((r.stderr or r.stdout).strip())
+    return r.stdout
+
+
+def read_monitor(bus):
+    def parse(text):
+        for line in text.splitlines():
+            f = line.split()
+            if len(f) >= 5 and f[0] == "VCP" and f[2] == "C":
+                vals[f[1].lower()] = (int(f[3]), int(f[4]))
+    vals = {}
+    try:
+        parse(ddcutil(bus, "getvcp", "10", "12", "--brief"))
+    except RuntimeError:
+        pass
+    for code in ("10", "12"):                 # one code per call if the combined read fell short
+        if code not in vals:
+            parse(ddcutil(bus, "getvcp", code, "--brief"))
+    if vals["10"][1] <= 0 or vals["12"][1] <= 0:
+        raise RuntimeError("monitor reports no backlight/contrast range")
+    return vals["10"], vals["12"]
+
+
+# ---------------------------------------------------------------- state
+def load():
+    try:
+        return json.load(open(STATE))
+    except (OSError, ValueError):
+        return {}
+
+
+def save(st):
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(st, f)
+    os.replace(tmp, STATE)
+
+
+class Locked:
+    def __init__(self, path, block=True):
+        self.path, self.block = path, block
+    def __enter__(self):
+        self.f = open(self.path, "a")
+        try:
+            fcntl.flock(self.f, fcntl.LOCK_EX | (0 if self.block else fcntl.LOCK_NB))
+        except BlockingIOError:
+            self.f.close()
+            return False
+        return True
+    def __exit__(self, *a):
+        self.f.close()
+
+
+def sync(m, bus):
+    """Read the monitor; adopt its backlight as the level and, at or above KNEE, its contrast as reference."""
+    (b, bmax), (c, cmax) = read_monitor(bus)
+    m.update(bmax=bmax, cmax=cmax)
+    if "ref" not in m:
+        m["ref"] = c
+    if m.get("b") != b:
+        m["level"] = 100.0 * b / bmax if bmax else 0.0
+    if m.get("c") != c and m["level"] >= KNEE:
+        m["ref"] = c                          # changed in the monitor's menu
+    m["b"], m["c"] = b, c
+
+
+def writer(key, bus):
+    """Apply the pending steps until none are left. One per monitor at a time."""
+    with Locked(f"{WRITER_LOCK}.{key}", block=False) as got:
+        if not got:
+            return
+        while True:
+            with Locked(LOCK):
+                st = load(); m = st.setdefault("mon", {}).setdefault(key, {})
+                stale = time.time() - m.get("t", 0) > RESYNC_S or "bmax" not in m
+            if stale:
+                tmp = dict(m)
+                sync(tmp, bus)
+            with Locked(LOCK):
+                st = load(); m = st.setdefault("mon", {}).setdefault(key, {})
+                if stale:
+                    pend = m.get("pending", 0.0); m.update(tmp); m["pending"] = pend
+                m["level"] = min(100.0, max(0.0, m.get("level", 50.0) + m.get("pending", 0.0)))
+                m["pending"] = 0.0
+                b, c = targets(m["level"], m["bmax"], m["cmax"], m["ref"])
+                todo = [x for x in (("10", b, "b"), ("12", c, "c")) if m.get(x[2]) != x[1]]
+                m["t"] = time.time()
+                save(st)
+            if not todo:
+                return
+            args = ["setvcp"]
+            for code, val, _ in todo:
+                args += [code, str(val)]
+            try:
+                ddcutil(bus, *args)
+            except Exception as e:
+                print(f"ddc-level: {e}", file=sys.stderr)
+                with Locked(LOCK):
+                    st = load(); st["mon"][key].pop("t", None); save(st)   # re-read next time
+                return
+            with Locked(LOCK):
+                st = load(); m = st["mon"][key]
+                for code, val, f in todo:
+                    m[f] = val
+                save(st)
+                if not m.get("pending"):
+                    return
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__.split("\n\n")[0], file=sys.stderr); return 2
+    out, op = sys.argv[1], sys.argv[2]
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with Locked(LOCK):
+        st = load()
+        bus, key = find_bus(out, st)
+        save(st)
+    if bus is None:
+        return 1
+    with Locked(LOCK):
+        m = load().get("mon", {}).get(key, {})
+        stale = time.time() - m.get("t", 0) > RESYNC_S or "bmax" not in m
+    if stale:                                 # read it now, so the HUD starts from the real level
+        tmp = dict(m)
+        try:
+            sync(tmp, bus)
+        except Exception as e:
+            print(f"ddc-level: {e}", file=sys.stderr)
+            return 1
+        tmp["t"] = time.time()
+    with Locked(LOCK):
+        st = load(); m = st.setdefault("mon", {}).setdefault(key, {})
+        if stale:
+            pend = m.get("pending", 0.0); m.update(tmp); m["pending"] = pend
+        if op in ("up", "down"):
+            step = float(sys.argv[3]) if len(sys.argv) > 3 else 5.0
+            m["pending"] = m.get("pending", 0.0) + (step if op == "up" else -step)
+        shown = min(100.0, max(0.0, m.get("level", 50.0) + m.get("pending", 0.0)))
+        save(st)
+    print(round(shown))
+    sys.stdout.flush()
+    if op in ("up", "down"):
+        if os.fork() == 0:                    # write in the background; the key handler returns now
+            os.setsid()
+            try:
+                writer(key, bus)
+            finally:
+                os._exit(0)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
