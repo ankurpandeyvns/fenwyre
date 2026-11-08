@@ -1,0 +1,88 @@
+#!/bin/bash
+# Build Asahi/Aurora's display driver (appledrm) with appledrm-parity.patch for the running
+# kernel, install it as an override in /lib/modules/$kver/updates/ and rebuild the UKI (the driver
+# loads from the initramfs). The packaged module is left untouched; a new kernel uses its own
+# stock module until this is run again.
+#
+# The patch (appledrm-parity.patch):
+#  - HDMI after sleep: suspend releases the built-in HDMI port's link, and resume waited for an
+#    HPD edge that never comes while the cable stays plugged in, so the display stayed dark
+#    until it was replugged. After resume it now reconnects the way a replug would.
+#  - DDC/CI: one I2C adapter per external DCP ("apple-dcp DDC ..."), carried over the DCP
+#    firmware's I2C calls (the ones macOS's IOAVServiceReadI2C/WriteI2C use), so ddcutil and
+#    PowerDevil can set monitor brightness. appledrm.ddc=0 turns it off, also at runtime.
+#
+# Source: the exact linux-aurora commit the installed package was built from, read from the
+# Omarchy PKGBUILD history (omacom/omarchy-pkgs), or AURORA_COMMIT=<sha>. The build uses the
+# kernel's own compiler version (clang 18 -> /usr/lib/llvm18, Arch packages clang18 lld18 llvm18).
+#   build-module           build, check, install, rebuild the UKI
+#   build-module --build   build and check only (prints the .ko path)
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+kver=$(uname -r)
+mode=${1:-install}
+kbuild=/usr/lib/modules/$kver/build
+stock=/usr/lib/modules/$kver/kernel/drivers/gpu/drm/apple/appledrm.ko
+[ -f "$stock" ] || { echo "no appledrm.ko for $kver (not an Asahi/Aurora kernel?)"; exit 1; }
+[ -d "$kbuild" ] || { echo "kernel headers for $kver are missing"; exit 1; }
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+# 7.2.11-14-1-ARCH -> _auroraver 7.2.11, _aurorarel 14, pkgrel 1
+IFS=- read -r aver arel prel _ <<<"$kver"
+commit=${AURORA_COMMIT:-}
+if [ -z "$commit" ]; then
+    api=https://api.github.com/repos/omacom/omarchy-pkgs
+    for sha in $(curl -fsSL "$api/commits?path=pkgbuilds/linux-aurora/PKGBUILD&per_page=60" |
+                 python3 -I -c 'import json,sys; print("\n".join(c["sha"] for c in json.load(sys.stdin)))'); do
+        pb=$(curl -fsSL "https://raw.githubusercontent.com/omacom/omarchy-pkgs/$sha/pkgbuilds/linux-aurora/PKGBUILD")
+        v=$(sed -n 's/^_auroraver=//p' <<<"$pb"); r=$(sed -n 's/^_aurorarel=//p' <<<"$pb"); p=$(sed -n 's/^pkgrel=//p' <<<"$pb")
+        if [ "$v" = "$aver" ] && [ "$r" = "$arel" ] && [ "$p" = "$prel" ]; then
+            commit=$(sed -n 's/^_commit=//p' <<<"$pb"); break
+        fi
+    done
+fi
+[ -n "$commit" ] || { echo "could not find the linux-aurora commit for $kver; set AURORA_COMMIT"; exit 1; }
+echo "linux-aurora $commit for $kver"
+
+git -C "$work" init -q src
+git -C "$work/src" remote add origin https://github.com/omacom/linux-aurora.git
+git -C "$work/src" fetch -q --depth 1 --filter=blob:none origin "$commit"
+git -C "$work/src" sparse-checkout set drivers/gpu/drm/apple
+git -C "$work/src" checkout -q FETCH_HEAD
+git -C "$work/src" apply "$here/appledrm-parity.patch"
+
+ccmajor=$(sed -n 's/^CONFIG_CLANG_VERSION=\([0-9]*\)[0-9]\{4\}$/\1/p' "$kbuild/.config")
+llvm=1
+if [ -n "$ccmajor" ] && [ -x "/usr/lib/llvm$ccmajor/bin/clang" ]; then llvm=/usr/lib/llvm$ccmajor/bin/; fi
+[ -n "$ccmajor" ] && [ "$llvm" = 1 ] && echo "warning: kernel built with clang $ccmajor; install clang$ccmajor lld$ccmajor llvm$ccmajor to match it"
+dir=$work/src/drivers/gpu/drm/apple
+make -s -j"$(nproc)" LLVM="$llvm" -C "$kbuild" M="$dir" modules 2>&1 | grep -v "compiler differs\|built by:\|You are using:" || true
+tools=; [ "$llvm" != 1 ] && tools=$llvm
+strip=${tools}llvm-strip nm=${tools}llvm-nm
+"$strip" --strip-debug -o "$work/appledrm.ko" "$dir/appledrm.ko"
+
+# Same kernel, same exports and parameters as the packaged module, and the fix is in it.
+[ "$(modinfo -F vermagic "$work/appledrm.ko")" = "$(modinfo -F vermagic "$stock")" ] || { echo "vermagic mismatch"; exit 1; }
+nmx() { "$nm" "$1" 2>/dev/null | awk '/ __ksymtab_/ {print $3}' | sort; }
+command -v "$nm" >/dev/null && { diff <(nmx "$stock") <(nmx "$work/appledrm.ko") >/dev/null || { echo "exported symbols differ from the packaged module"; exit 1; }; }
+[ -z "$(comm -23 <(modinfo -F parm "$stock" | sort) <(modinfo -F parm "$work/appledrm.ko" | sort))" ] || { echo "module parameters of the packaged module are missing"; exit 1; }
+for m in "still attached after system sleep" "apple-dcp DDC"; do
+    grep -aq "$m" "$work/appledrm.ko" || { echo "patch missing from the build ($m)"; exit 1; }
+done
+
+if [ "$mode" = --build ]; then
+    install -Dm644 "$work/appledrm.ko" "$here/appledrm-$kver.ko"; echo "built $here/appledrm-$kver.ko"; exit 0
+fi
+sudo install -Dm644 "$work/appledrm.ko" "/lib/modules/$kver/updates/appledrm.ko"
+sudo depmod "$kver"
+[ "$(modinfo -n appledrm)" = "/lib/modules/$kver/updates/appledrm.ko" ] || { echo "depmod does not prefer the override"; exit 1; }
+echo "installed /lib/modules/$kver/updates/appledrm.ko"
+if command -v omarchy-mac-boot-update >/dev/null; then
+    sudo omarchy-mac-boot-update
+elif command -v limine-update >/dev/null; then
+    sudo limine-update
+else
+    sudo mkinitcpio -P
+fi
+echo "takes effect at the next boot. Undo: sudo rm /lib/modules/$kver/updates/appledrm.ko && sudo depmod && rebuild the initramfs/UKI"

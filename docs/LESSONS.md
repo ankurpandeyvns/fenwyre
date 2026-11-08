@@ -198,3 +198,23 @@
   wall time, so each screen gets a lane (screens ordered by position) and runs the timeline shifted by lane/lanes of
   a full cycle, with the lane mixed into the program seed. Lock screen and desktop of one screen compute the same
   lane, so the unlock hand-off still matches; a hotplug changes the lanes and restarts the timeline.
+
+## Display driver (Asahi DCP)
+
+- Built-in HDMI dark after sleep until replugged: `dcp_platform_suspend()` releases the HDMI link
+  (`dcp_dptx_disconnect`), and resume only re-arms the edge-triggered HPD IRQ. A cable that stays plugged in gives no
+  edge. The fix queues the HPD handler's own update (debounce, connect) once after resume.
+- DDC/CI: the DCP connectors have no host I2C. macOS's `DCPAVServiceProxy::readI2C`/`writeI2C` (kext
+  `DCPAVFamilyProxy`, in the macOS kernel cache on the recoveryOS partition) send EPIC standard service calls on
+  `dcpav-service-epic`: group 1, command 9 (read) / 10 (write), a 64-byte argument block (fields every 16 bytes)
+  then the data. `copyEDID` is command 7 there too, which is what Linux already sends: same command table.
+  m1ddc: chip 0x37, 0xB7 behind the MCDP29xx DP->HDMI converter; offset = first written byte (0x51).
+- Read the kernel cache: `apfs-fuse` (build from source, `-include cstdint`) mounts the recovery container
+  (nvme0n1p7) read-only; the main macOS container fails in its KeyManager. `ipsw kernel dec`, `ipsw kernel extract`,
+  `ipsw macho disass --symbol` (the kexts keep their C++ symbols).
+- Rebuilding appledrm: the package is built with clang 18 (`/usr/lib/llvm18`, Arch `clang18 lld18 llvm18`); with it
+  the out-of-tree rebuild of the pinned commit is byte-identical in `.text` to the packaged module. The commit comes
+  from the `_commit=` of omarchy-pkgs' `pkgbuilds/linux-aurora/PKGBUILD` matching `_auroraver`/`_aurorarel`/`pkgrel`.
+- appledrm loads from the initramfs inside the UKI: an `updates/` override needs `omarchy-mac-boot-update`.
+  That command re-derives `/etc/default/limine` from `/etc/default/grub` first, so kernel command line changes go in
+  GRUB's defaults (this dropped the TRIM option once).

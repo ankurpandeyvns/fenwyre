@@ -99,6 +99,12 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   locks: `kreadconfig6 --file kglobalshortcutsrc --group ksmserver --key "Lock Session"` lists `Meta+Ctrl+Q`.
 - **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
   `kscreen-doctor -o` shows `Vrr: Always` on the built-in display (eDP).
+  Display driver (Asahi, `appledrm` unit, next boot): `modinfo -n appledrm` is under `updates/`; the kernel log has
+  `DDC: i2c-N` for each external DCP; `ddcutil detect` lists the external monitors and `ddcutil -b N getvcp 10`
+  reads brightness (first try only `getvcp`; `setvcp` after that works). After `systemctl suspend` and wake with the
+  HDMI cable plugged in, the log shows `DP2HDMI: display still attached after system sleep, reconnecting` and the
+  display comes back. If DDC misbehaves: `echo 0 | sudo tee /sys/module/appledrm/parameters/ddc`. After a kernel
+  update, rerun `system/display/build-module` (it finds the kernel's linux-aurora commit by itself).
 - **battery**: `battery-limit` shows the threshold; above it on AC, `charge_behaviour` is `auto-discharge`.
   Fans (same feature, M1 Pro/Max/Ultra on Asahi): `modinfo -n macsmc_hwmon` is under `updates/`, a `macsmc_soc_die`
   thermal zone exists, `/run/mac-fan/state.json` updates every 2 s; switch profile (`echo max >
