@@ -143,7 +143,17 @@ docs/LESSONS.md     traps and how they were solved
 docs/images/        README screenshots
 ```
 
-`wallpapers/net.local.macintosh` contains Apple's Macintosh artwork and two of Apple's scene scripts, for
-personal use only. **Keep this repository private.**
+## Credits
+
+- **Macintosh wallpaper**: pixel art by Susan Kare for Apple, and two of Apple's scene scripts from macOS Sequoia,
+  via Stephen Hackett's [512 Pixels](https://512pixels.net/2025/06/inside-macintosh-screen-saver/). Details in
+  [wallpapers/net.local.macintosh/SOURCES.md](wallpapers/net.local.macintosh/SOURCES.md).
+- **Theme**: [WhiteSur](https://github.com/vinceliuice/WhiteSur-kde) by vinceliuice (installed from upstream, not bundled).
+- **Fonts**: SF Pro / SF Mono from the AUR `apple-fonts` package (not bundled); Source Code Pro for Powerline.
+- **Lock screen**: based on Plasma's Breeze lock screen (GPL); fan driver patch on Asahi's `macsmc-hwmon` (GPL).
+- **Before screenshot**: Michio.kawaii, Wikimedia Commons, GPL.
+
+Fenwyre is an independent project, not affiliated with or endorsed by Apple Inc. macOS, Macintosh, Spotlight
+and the Apple logo are trademarks of Apple Inc.
 
 Files containing `@HOME@` are templates; the installer substitutes your home directory.

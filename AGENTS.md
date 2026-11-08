@@ -106,7 +106,7 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   `system/fan/build-module` (the stock module comes back until then; mac-fand then leaves the fans to the SMC).
   TRIM (same feature): `/etc/default/limine` has `rd.luks.options=<root uuid>=discard`; after a reboot
   `lsblk -D /dev/mapper/root` shows a non-zero DISC-GRAN and `findmnt -no OPTIONS /` includes `discard=async`.
-- **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
+- **audio**: replace `XX_XX_XX_XX_XX_XX` in `config/pipewire/60-sony-clearbass.conf` with the headset MAC first. Mute the speakers, restart
   PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
   (`sudo timeout 4 btmon`: adaptive ~660-990 kbps; `hq` ~1 Mbps).
 - **netstats**: `cat /run/mac-stats/net.json` and `/run/mac-stats/gpu.json` update every 2 s (`work` = clock-weighted load, `busy` = raw busy %); the GPU tab lists top apps whose
