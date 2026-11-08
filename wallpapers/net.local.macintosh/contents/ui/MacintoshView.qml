@@ -18,6 +18,12 @@ Item {
     property bool paused: false
     property color accent: "#3daee9"
     property real hueOffset: 0              // per-screen spectrum offset
+    // Like macOS, each screen plays its own animation of the same wallpaper: screen `lane` of
+    // `lanes` runs the shared timeline shifted by lane/lanes of a full cycle (a different
+    // program, or another point of the same one) with its own random seed. Lock screen and
+    // desktop on one screen get the same lane, so they still show the same frame.
+    property int lane: 0
+    property int lanes: 1
 
     // ---- state ----
     readonly property url imgBase: Qt.resolvedUrl("../images/")
@@ -50,8 +56,9 @@ Item {
     signal frozeAt(double wallMs)           // static mode settled on the frame at this wall time
 
     // The whole animation is a pure function of wall-clock time: programs follow each
-    // other from a fixed epoch in seeded order, so every instance (lock screen, desktop,
-    // each screen) shows the same frame at the same moment without talking to each other.
+    // other from a fixed epoch in seeded order, so every instance (lock screen, desktop) of a
+    // screen shows the same frame at the same moment without talking to each other; each screen
+    // is offset along that timeline by its lane (see `lane`).
     readonly property double epochMs: Date.UTC(2024, 0, 24)        // Macintosh 40th anniversary
     readonly property real speedK: Math.max(0.05, speed)
     property var durations: ({})            // program time each program runs before its fade-out
@@ -118,7 +125,7 @@ Item {
         if (machine) machine._cursorKey = "?";
         var extra = programs[currentProgram + ".extra"];
         if (!extra || extra.labels[name] === undefined) return;
-        var m = new M.Machine(view, extra, true, slotSeed * 7 + 3);
+        var m = new M.Machine(view, extra, true, slotSeed * 7 + 3 + lane * 7919);
         m.t = t;
         m.waitUntil = t;
         m.pc = extra.labels[name];
@@ -161,13 +168,20 @@ Item {
     }
 
     // ------------------------------------------------------------------ timeline
+    function slotLen(name) { return (durations[name] || 60) + fadeDur; }
+    readonly property real laneShift: {
+        if (lanes < 2 || lane <= 0 || !loaded) return 0;
+        var L = 0;
+        if (scene !== "Cycle" && programs[scene]) L = slotLen(scene);
+        else for (var i = 0; i < programNames.length; ++i) L += slotLen(programNames[i]);
+        return (lane % lanes) * L / lanes;
+    }
     function timelinePos(wallMs) {
-        return (wallMs - (anchorWall > 0 ? anchorWall : epochMs)) / 1000 * speedK;
+        return (wallMs - (anchorWall > 0 ? anchorWall : epochMs)) / 1000 * speedK + laneShift;
     }
     function wallOf(t) {        // wall time (ms) at program time t of the current program
-        return (anchorWall > 0 ? anchorWall : epochMs) + (slotStart + t) / speedK * 1000;
+        return (anchorWall > 0 ? anchorWall : epochMs) + (slotStart + t - laneShift) / speedK * 1000;
     }
-    function slotLen(name) { return (durations[name] || 60) + fadeDur; }
     function rawBag(k) {
         var a = programNames.slice().sort(), r = M.rng(0x5eed0000 + k);
         for (var i = a.length - 1; i > 0; --i) {
@@ -308,6 +322,8 @@ Item {
     onSpeedChanged: restart()
     onSceneChanged: restart()
     onModeChanged: restart()
+    onLaneChanged: restart()          // a screen was added or removed
+    onLanesChanged: restart()
 
     function restart() {
         if (!loaded) return;
@@ -401,7 +417,7 @@ Item {
         plane.rampFrom = Qt.point(0, 0);
         plane.rampTo = Qt.point(0, 0);
         plane.rampT0 = -100;
-        machine = new M.Machine(view, programs[slot.name], false, slot.seed);
+        machine = new M.Machine(view, programs[slot.name], false, slot.seed + lane * 7919);
         machine.step(0);
         fastForward(slot.off);
     }

@@ -27,6 +27,14 @@ WallpaperItem {
         accent: Kirigami.Theme.highlightColor
         // Spectrum differs per screen: offset the hue by the screen's position.
         hueOffset: (main.Screen.virtualX + main.Screen.virtualY) / 9000.0
+        // Each screen its own animation: screens ordered left to right (then top to bottom).
+        lanes: Qt.application.screens.length
+        lane: {
+            var me = main.Screen, n = 0, sc = Qt.application.screens;
+            for (var i = 0; i < sc.length; ++i)
+                if (sc[i].virtualX < me.virtualX || (sc[i].virtualX === me.virtualX && sc[i].virtualY < me.virtualY)) ++n;
+            return n;
+        }
         paused: main.configuration.PauseWhenCovered !== false && watcher.item !== null && watcher.item.covered
         locked: lockBridge.item !== null && lockBridge.item.locked
         onFrozeAt: function (wallMs) {

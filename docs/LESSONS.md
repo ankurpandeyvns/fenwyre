@@ -191,3 +191,10 @@
   1296 MHz), so a light desktop reads ~30% busy. The firmware's `util1..4` are the same kind of number (DVFS load
   at the current clock). Mac Stats shows **Load** = busy time weighted by clock / max clock, sampled every 50 ms by
   gpu-feed (the clock changes many times a second; one sample per 2 s is wrong). Raw busy stays as "Busy time".
+
+## Wallpaper: a different animation per screen
+
+- macOS plays the same wallpaper with a different animation on each display. The timeline is a pure function of
+  wall time, so each screen gets a lane (screens ordered by position) and runs the timeline shifted by lane/lanes of
+  a full cycle, with the lane mixed into the program seed. Lock screen and desktop of one screen compute the same
+  lane, so the unlock hand-off still matches; a hotplug changes the lanes and restarts the timeline.
