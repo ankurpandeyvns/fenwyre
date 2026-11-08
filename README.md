@@ -1,15 +1,66 @@
-# kde-macos-parity
+# Kupertino
 
-Make KDE Plasma 6 (Wayland) look and behave as close to macOS as practical. Built and used daily on a
-MacBook Pro 16" M1 Max running Asahi Arch Linux ARM with Plasma 6.8, an LG 4K, a side monitor,
-a Logitech MX Keys and an MX Master 3.
+**macOS feel, Linux freedom.** A KDE Plasma 6 setup that gets as close to macOS as Linux allows, down to
+the menu bar, Spotlight, Control Center, the lock screen and the little things like Cmd+Shift+4.
 
-Everything is user-level except three small root services. All of it is idempotent and backs up what it
-touches to `~/kde-pre-mac-backup/`.
+<p align="center">
+  <img src="docs/images/after.jpg" alt="Kupertino on KDE Plasma 6: macOS-style menu bar, glass windows, dock and the Macintosh live wallpaper" width="100%">
+</p>
 
-> Agents: read [AGENTS.md](AGENTS.md) before running anything. It has the order of operations, the
-> verification method for each piece, and the traps that cost hours the first time
-> ([docs/LESSONS.md](docs/LESSONS.md)).
+## Before and after
+
+| Stock KDE Plasma 6 | Kupertino |
+|---|---|
+| <img src="docs/images/before-stock-plasma.jpg" alt="Stock KDE Plasma 6.4 desktop with Breeze Dark"> | <img src="docs/images/after.jpg" alt="The same Plasma with Kupertino applied"> |
+
+<sub>Before: "KDE Plasma 6.4.5 Dark" by Michio.kawaii,
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:KDE_Plasma_6.4.5_Dark.png), GPL.</sub>
+
+## Why
+
+I love macOS: the polish, the shortcuts, the way everything feels considered. What I didn't love was the
+lack of freedom, and as a developer who lives in Docker, the VM tax: on macOS every container runs inside
+a Linux VM that holds on to gigabytes of RAM whether you need them or not. On Linux, containers are just
+processes.
+
+So this repo takes the other road: keep Linux, and rebuild as much of the macOS experience on top of KDE
+Plasma as possible. It's built and used daily on a MacBook Pro 16" M1 Max running Asahi Linux
+(Omarchy, Arch Linux ARM) with Plasma 6.8 on Wayland, plus an LG 4K, a portrait side monitor, a Logitech
+MX Keys and an MX Master 3. Most of it works on any Plasma 6 machine; a few pieces (fans, GPU stats,
+battery limit) are Apple silicon specific.
+
+## A closer look
+
+| | |
+|---|---|
+| <img src="docs/images/lock-screen.jpg" alt="Lock screen: Liquid Glass stencil clock over the animated Macintosh wallpaper"> | <img src="docs/images/spotlight.jpg" alt="Spotlight on Cmd+Space answering 2^10 * 3"> |
+| **Lock screen**: Liquid Glass clock over the animated wallpaper; each display plays its own animation and the desktop picks up the same frame on unlock. | **Spotlight** on Cmd+Space: apps, settings, calculator, unit and currency conversion. |
+| <img src="docs/images/control-center.png" alt="Control Center popup" width="380"> | <img src="docs/images/mac-stats.png" alt="Mac Stats popup with CPU graph and top processes" width="460"> |
+| **Control Center**: Wi-Fi, Bluetooth, VPN, Focus, per-screen brightness, sound, Now Playing. | **Mac Stats** (Stats / iStat Menus): CPU, memory, GPU, network and sensors, with per-app CPU, memory, network and GPU. |
+
+## Omarchy users: install KDE Plasma first
+
+Omarchy ships Hyprland. Kupertino is a **KDE Plasma 6 (Wayland)** setup, so Plasma has to be installed and
+running before you apply anything:
+
+```bash
+sudo pacman -S plasma-meta dolphin konsole      # Plasma 6 + the file manager and terminal used here
+```
+
+Omarchy logs you straight into Hyprland through SDDM autologin. Switch that to Plasma (or remove the
+autologin and pick "Plasma (Wayland)" at the login screen):
+
+```ini
+# /etc/sddm.conf.d/99-kde.conf
+[Autologin]
+Session=plasma.desktop
+```
+
+Reboot into Plasma, then come back here. Notes from doing this on Omarchy:
+
+- Keep the `omarchy` package installed: Omarchy's Asahi kernel and boot pieces depend on it.
+- Keep gnome-keyring as the Secret Service so browsers stay logged in; leave KWallet disabled.
+- The `lockscreen` feature hides the Hyprland entries from the login screen (only Plasma is offered).
 
 ## What you get
 
@@ -53,7 +104,8 @@ touches to `~/kde-pre-mac-backup/`.
 
 ## Install
 
-Pick what you want; nothing is all-or-nothing.
+Pick what you want; nothing is all-or-nothing. Everything is user-level except a few small root services,
+it's idempotent, and it backs up what it touches to `~/kde-pre-mac-backup/`.
 
 ```bash
 ./install.sh features              # the 16 features: id|group|title|description|sudo
@@ -63,16 +115,17 @@ Pick what you want; nothing is all-or-nothing.
 ./install.sh deps                  # pacman packages (sudo)
 ```
 
-With an agent (Claude Code, Codex, ...): open this repo and ask it to follow AGENTS.md. Its first step asks you,
-with a multiple-choice prompt, whether to apply everything or which features, then applies and verifies only
-those. Then the manual steps in AGENTS.md (WhiteSur theme, fonts, panel order, window rules).
+With an agent (Claude Code, Codex, ...): open this repo and ask it to follow [AGENTS.md](AGENTS.md). Its first
+step asks you, with a multiple-choice prompt, whether to apply everything or which features, then applies and
+verifies only those. Then the manual steps in AGENTS.md (WhiteSur theme, fonts, panel order, window rules).
+The traps that cost hours the first time are written up in [docs/LESSONS.md](docs/LESSONS.md).
 
 ## Layout
 
 ```
 bin/                user helpers (installed to ~/.local/bin)
 systemd/user/       user services for those helpers
-system/             root helpers + units (battery-limit, nethogs-feed)
+system/             root helpers + units (battery-limit, nethogs-feed, gpu-feed, mac-fand, fan driver patch, SDDM)
 plasmoids/          Spotlight, Control Center, Mac Stats widgets
 wallpapers/         Macintosh live wallpaper (interprets Apple's .program scene scripts)
 look-and-feel/      macOS Light / macOS Dark global themes
@@ -81,6 +134,7 @@ qml-blurbehind/     tiny C++ QML plugin: ask KWin to blur behind a QML item
 plasma-scripts/     Plasma scripting snippets (panel widgets, tray, launcher icon)
 config/             launchers, D-Bus services, Dolphin service menu, Konsole, fontconfig, KRunner plugins
 docs/LESSONS.md     traps and how they were solved
+docs/images/        README screenshots
 ```
 
 `wallpapers/net.local.macintosh` contains Apple's Macintosh artwork and two of Apple's scene scripts, for
