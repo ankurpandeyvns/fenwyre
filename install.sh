@@ -40,8 +40,8 @@ quicklook|Keyboard|Quick Look (Space)|Space previews files in Dolphin and on the
 konsole|Apps|Terminal profile|Konsole "Mac" profile with Source Code Pro for Powerline as the default|no
 helium|Apps|Helium hardware video|VA-API decode on Apple silicon (H.264/VP9) and an extension that hides AV1 so YouTube uses hardware decode|no
 mxkeys|Apps|Logitech Mac mode|Switch Logitech keyboards (MX Keys) to macOS layout at login and on every reconnect (Solaar)|no
-brightness|Apps|Brightness keys|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%)|no
-battery|System|Battery limit + fan profiles|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max)|yes
+brightness|Apps|Brightness keys + ProMotion|Change only the display under the mouse; built-in panel steps in perceived brightness (2.5%); adaptive refresh on the built-in display|no
+battery|System|Battery, fans + SSD TRIM|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max); TRIM through the encrypted root (next boot)|yes
 audio|System|Bluetooth audio|LDAC adaptive bitrate (no skipping; hq option in the file); Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
 netstats|System|Per-app network/GPU + SF font|Root feeds for Mac Stats per-app network (packet capture) and GPU (scheduler tracepoints); SF Pro preferred over other sans fonts|yes
 windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size/position (agent creates them, see AGENTS.md)|no
@@ -59,8 +59,8 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
         konsole)     echo konsole ;;
         helium)      echo helium ;;
         mxkeys)      echo mxkeys ;;
-        brightness)  echo brightness ;;
-        battery)     echo battery fans ;;
+        brightness)  echo brightness vrr ;;
+        battery)     echo battery fans trim ;;
         audio)       echo audio ;;
         netstats)    echo netfeed sffont ;;
         windows)     echo windows ;;
@@ -69,7 +69,7 @@ feature_units() {   # feature -> units, in no particular order (apply() orders a
 }
 # Execution order for units (shared pieces first, panel layout and plasmashell restart last).
 ORDER=(packages bin_stats blur osd volume_sound lockscreen lockwallpaper loginscreen themesettings glass cmdswap krunner shots
-       quicklook konsole helium mxkeys brightness audio windows battery fans netfeed sffont layout restart)
+       quicklook konsole helium mxkeys brightness vrr audio windows battery fans trim netfeed sffont layout restart)
 
 # ------------------------------------------------------------------ units
 unit_packages() {   # Plasma packages are inert until used: widgets, global themes, wallpaper
@@ -252,6 +252,33 @@ unit_battery() {
     sudo install -Dm644 "$HERE/system/systemd/battery-limit.service.d/save-on-stop.conf" /etc/systemd/system/battery-limit.service.d/save-on-stop.conf
     sudo systemctl daemon-reload; sudo systemctl enable --now battery-limit.service
 }
+unit_vrr() {
+    say "adaptive refresh (ProMotion) on the built-in display"
+    local out; out=$(kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | awk '/^Output:/{print $3}' | grep -E '^(eDP|LVDS|DSI)' | head -1)
+    [ -n "$out" ] || { echo "no built-in display, skipping"; return 0; }
+    backup "$HOME/.config/kwinoutputconfig.json"
+    # "Always", not "Automatic": KWin's Automatic only enables VRR for full-screen games.
+    kscreen-doctor "output.$out.vrrpolicy.always" >/dev/null || echo "$out: VRR not supported, left as is"
+}
+unit_trim() {
+    say "root: TRIM through the LUKS root (rd.luks.options=<uuid>=discard on the kernel command line)"
+    local uuid; uuid=$(tr ' ' '\n' </proc/cmdline | sed -n 's/^rd\.luks\.name=\([^=]*\)=.*/\1/p' | head -1)
+    [ -n "$uuid" ] || { echo "root is not unlocked with rd.luks.name=, skipping"; return 0; }
+    if tr ' ' '\n' </proc/cmdline | grep -qx "rd.luks.options=$uuid=discard"; then echo "already enabled"; return 0; fi
+    local f tmp; tmp=$(mktemp -d)
+    for f in /etc/default/limine /boot/efi/limine.conf /boot/limine.conf; do
+        sudo test -f "$f" || continue
+        sudo grep -q "rd.luks.name=$uuid=" "$f" || continue
+        sudo grep -q "rd.luks.options=$uuid=discard" "$f" && continue
+        sudo cp -a "$f" "$f.pre-discard"
+        sudo cat "$f" | sed "s/rd\.luks\.name=$uuid=\([^ \"]*\)/rd.luks.name=$uuid=\1 rd.luks.options=$uuid=discard/g" > "$tmp/new"
+        sudo install -m "$(sudo stat -c %a "$f")" "$tmp/new" "$f" && echo "$f: discard added (backup $f.pre-discard)"
+    done
+    rm -rf "$tmp"
+    sudo test -f /etc/default/limine || echo "not Limine: add rd.luks.options=$uuid=discard to your kernel command line"
+    sudo systemctl enable fstrim.timer >/dev/null 2>&1 || true
+    echo "takes effect at the next boot; then lsblk -D /dev/mapper/* shows non-zero DISC-GRAN"
+}
 unit_netfeed() {
     say "root: per-app network feed for Mac Stats"
     sudo install -m755 "$HERE/system/bin/nethogs-feed" /usr/local/bin/nethogs-feed
@@ -308,7 +335,7 @@ resolve() {   # sets SELECTED and RUN (ordered units); fails on unknown ids befo
 plan() {
     resolve "$@"
     echo "features: ${SELECTED[*]}"; echo "units:    ${RUN[*]}"
-    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
+    local s=no; for u in "${RUN[@]}"; do case $u in battery|fans|trim|netfeed|sffont|loginscreen) s=yes ;; esac; done; echo "sudo:     $s"
 }
 apply() {
     resolve "$@"

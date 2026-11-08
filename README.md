@@ -30,10 +30,12 @@ touches to `~/kde-pre-mac-backup/`.
 | Screenshots | Cmd+Shift+3 / 4 / 5 to the Desktop, add Ctrl for clipboard | `config/applications/mac-shot-*` + kglobalaccel |
 | BetterDisplay brightness | Brightness keys change only the display under the mouse (DDC/CI on externals); the built-in panel steps 2.5% in perceived lightness (CIE L*), like macOS, instead of linear nits | `bin/brightness-here*` |
 | AlDente | Battery charge limit (default 80%) that survives reboots; above the limit it discharges while plugged in (Asahi `auto-discharge`) | `system/bin/battery-limit` |
+| ProMotion | Adaptive refresh (VRR "Always") on the built-in display | `install.sh` (`vrr` unit) |
+| SSD TRIM (macOS does it automatically) | Discards pass through the encrypted root (`rd.luks.options=<uuid>=discard`, Limine), btrfs `discard=async`, weekly fstrim | `install.sh` (`trim` unit) |
 | Bluetooth audio | LDAC adaptive: backs off on radio dips instead of skipping (`hq` = locked 990 kbps, fuller but skips on a weak link) | `config/wireplumber/52-bluez-ldac.conf` |
 | Sony Clear Bass on LDAC | WH-1000XM3 ignores its own EQ on LDAC, so PipeWire applies a Clear Bass-style tune (−6 dB preamp, +6 dB low shelf at 120 Hz) as a smart filter in front of the headset only; hidden from output lists | `config/pipewire/60-sony-clearbass.conf` (edit `filter.smart.target` for your headset's `bluez_output.<MAC>.1`) |
 | Helium video (Apple silicon) | Hardware VA-API decode for H.264/VP9; an extension hides AV1 (no AV1 decoder on M1/M2) so YouTube uses hardware | `config/helium/` |
-| MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect | `bin/logi-macmode` (Solaar) |
+| MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect; the lock key (Ctrl+Cmd+Q) locks the screen | `bin/logi-macmode` (Solaar) |
 | Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |
 | Macintosh live wallpaper (Sequoia) | Susan Kare 1-bit scenes as tilted coloured pixel tiles that zoom, scroll and animate; Spectrum and 10 other colours; 10 scenes | `wallpapers/net.local.macintosh` |

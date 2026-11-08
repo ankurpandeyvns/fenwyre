@@ -98,11 +98,14 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 - **mxkeys**: `journalctl --user -u logi-macmode` shows `MX Keys: MacOS`; the lock key (sends Ctrl+Cmd+Q in Mac mode)
   locks: `kreadconfig6 --file kglobalshortcutsrc --group ksmserver --key "Lock Session"` lists `Meta+Ctrl+Q`.
 - **brightness**: brightness keys change only the display under the mouse; HUD shows the level.
+  `kscreen-doctor -o` shows `Vrr: Always` on the built-in display (eDP).
 - **battery**: `battery-limit` shows the threshold; above it on AC, `charge_behaviour` is `auto-discharge`.
   Fans (same feature, M1 Pro/Max/Ultra on Asahi): `modinfo -n macsmc_hwmon` is under `updates/`, a `macsmc_soc_die`
   thermal zone exists, `/run/mac-fan/state.json` updates every 2 s; switch profile (`echo max >
   /var/lib/mac-fan/profile`, then `apple`, then `macos`) and watch the rpm follow. After a kernel update, rerun
   `system/fan/build-module` (the stock module comes back until then; mac-fand then leaves the fans to the SMC).
+  TRIM (same feature): `/etc/default/limine` has `rd.luks.options=<root uuid>=discard`; after a reboot
+  `lsblk -D /dev/mapper/root` shows a non-zero DISC-GRAN and `findmnt -no OPTIONS /` includes `discard=async`.
 - **audio**: set the headset MAC in `config/pipewire/60-sony-clearbass.conf` first. Mute the speakers, restart
   PipeWire, then verify with `pw-link -l` (app → `effect_input.sony_clearbass` → headset) and the LDAC bitrate
   (`sudo timeout 4 btmon`: adaptive ~660-990 kbps; `hq` ~1 Mbps).
