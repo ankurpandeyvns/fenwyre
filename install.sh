@@ -241,7 +241,12 @@ unit_brightness() {
 unit_audio() {
     say "Bluetooth audio: LDAC adaptive (no skips on radio dips); Sony EQ filter (targets the MAC in the file)"
     for f in "$HERE"/config/wireplumber/*.conf; do put "$f" "$HOME/.config/wireplumber/wireplumber.conf.d/$(basename "$f")"; done
+    # The EQ filter targets one headset: keep the MAC already installed, else HEADSET_MAC=AA:BB:..., else warn.
+    local eq="$HOME/.config/pipewire/pipewire.conf.d/60-sony-clearbass.conf" mac="${HEADSET_MAC:-}"
+    [ -z "$mac" ] && [ -f "$eq" ] && mac=$(sed -n 's/.*bluez_output\.\([0-9A-Fa-f_]\{17\}\)\..*/\1/p' "$eq" | head -1)
     for f in "$HERE"/config/pipewire/*.conf; do put "$f" "$HOME/.config/pipewire/pipewire.conf.d/$(basename "$f")"; done
+    if [ -n "$mac" ]; then sed -i "s/XX_XX_XX_XX_XX_XX/$(echo "$mac" | tr ':a-f' '_A-F')/" "$eq"
+    else echo "Sony EQ: set HEADSET_MAC=AA:BB:CC:DD:EE:FF (or edit $eq) to target your headset"; fi
     echo "Takes effect after: systemctl --user restart pipewire pipewire-pulse wireplumber (mute the speakers first)"
 }
 unit_windows() { echo "Window memory is created per app by the agent (AGENTS.md step 9); nothing to copy."; }
