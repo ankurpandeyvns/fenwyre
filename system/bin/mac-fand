@@ -10,15 +10,19 @@ Profile (one word in /var/lib/mac-fan/profile, re-read every cycle):
           the smoothed die temperature passes 60 C and the trend predicts it will keep climbing, the
           fans start at their minimum and creep up only as fast as the predicted overshoot of 80 C
           demands. Full speed only when the chip is at 90 C or more, still rising, with the fans
-          already past 60%: the point where airflow, not silence, has to win. Off again once below
-          58 C for 30 s. (default)
+          already past 60%: the point where airflow, not silence, has to win. The prediction alone
+          (a short burst heating the chip quickly) never takes the fans past 50%; above that the
+          chip itself has to be within 8 C of 80 C. Off again once below 58 C for 30 s. (default)
   high    the same controller tuned for temperature over silence (like macOS "High Power"):
           starts at 50 C, holds about 70 C, ramps four times faster
   max     both fans at full speed
   apple   hand the fans to the SMC firmware (what Linux does without this daemon)
 
 Safety: any read error, a missing die zone, or a die at or above 95 C hands the fans back to the SMC
-(target 0) until the next good reading below 90 C; on exit the fans go back to the SMC too.
+(target 0) until the next good reading below 90 C; on exit the fans go back to the SMC too. The
+controller then resumes at the speed it had, not at full speed.
+Log (journalctl -u mac-fand): fans starting, passing 50%, full speed, SMC hand-offs and stops, with
+the temperatures and the busiest processes at that moment.
 Status for the menu bar widget: /run/mac-fan/state.json.
 """
 import glob, json, os, signal, sys, time
@@ -42,6 +46,8 @@ HORIZON = 60.0       # s ahead the controller predicts
 MAX_AT = 90.0        # full speed when at/above this, still rising, and the fans past MAX_FROM
 MAX_FROM = 0.6
 MAX_RELEASE = 85.0   # leave full speed below this
+SOFT_CAP = 0.5       # highest speed the prediction alone can reach ...
+SOFT_CAP_BELOW = 8.0 # ... while the smoothed temperature is more than this under `hold`
 EMERGENCY, EMERGENCY_CLEAR = 95.0, 90.0
 
 
@@ -68,6 +74,35 @@ def die_temp():
         except (OSError, ValueError):
             pass
     return None
+
+
+def busiest(n=3, window=0.5):
+    """The n processes using the most CPU over `window` seconds, as 'name 123%'."""
+    def snap():
+        out = {}
+        for d in os.listdir("/proc"):
+            if not d.isdigit():
+                continue
+            try:
+                with open(f"/proc/{d}/stat") as f:
+                    st = f.read()
+                name = st[st.index("(") + 1:st.rindex(")")]
+                fields = st[st.rindex(")") + 2:].split()
+                out[d] = (name, int(fields[11]) + int(fields[12]))
+            except (OSError, ValueError, IndexError):
+                pass
+        return out
+    a = snap(); time.sleep(window); b = snap()
+    hz = os.sysconf("SC_CLK_TCK")
+    use = sorted(((b[k][1] - a[k][1], b[k][0]) for k in b if k in a), reverse=True)[:n]
+    return ", ".join(f"{name} {100 * ticks / hz / window:.0f}%" for ticks, name in use if ticks > 0) or "idle"
+
+
+def log(msg, t=None, smooth=None, pred=None, procs=True):
+    temps = ""
+    if t is not None:
+        temps = f" (die {t:.1f} C, smoothed {smooth:.1f} C, predicted {pred:.1f} C)"
+    print(msg + temps + (f"; busiest: {busiest()}" if procs else ""), flush=True)
 
 
 def param(name):
@@ -144,6 +179,8 @@ def main():
     emergency = False
     smooth = None
     history = []           # (monotonic time, smoothed temperature)
+    last_mode = None
+    logged_half = False
     try:
         while running["on"]:
             p = profile()
@@ -164,9 +201,13 @@ def main():
                 pred = smooth + max(0.0, slope) * HORIZON
             try:
                 if t is None or (t >= EMERGENCY) or (emergency and t >= EMERGENCY_CLEAR):
+                    if not emergency:
+                        log("die temperature unreadable; fans handed to the SMC" if t is None
+                            else "die at/above 95 C; fans handed to the SMC", t, smooth, pred)
                     emergency = t is None or t >= EMERGENCY_CLEAR
                     fans.release(); mode = "apple (safety)" if p != "apple" else "apple"
-                    spinning, speed, full = True, 1.0, False
+                    # keep `speed`: when readings are good again the controller carries on from it
+                    spinning, full = True, False
                 elif p == "apple":
                     emergency = False
                     fans.release(); spinning, speed, full = True, 0.0, False
@@ -181,18 +222,28 @@ def main():
                     if not spinning:
                         if smooth >= k["start"] and pred >= k["hold"] - 10.0:
                             spinning, speed, cool_since = True, 0.0, None
+                            log("fans starting", t, smooth, pred)
                     else:
                         if smooth < k["stop"]:
                             cool_since = cool_since or now
                             if now - cool_since >= STOP_AFTER:
                                 spinning, speed, full = False, 0.0, False
+                                log("fans stopped", t, smooth, pred, procs=False)
                         else:
                             cool_since = None
                     if spinning:
                         err = pred - k["hold"]
                         speed += (k["up"] if err > 0 else k["down"]) * err
-                        speed = max(0.0, min(1.0, speed))
+                        cap = 1.0 if smooth >= k["hold"] - SOFT_CAP_BELOW else SOFT_CAP
+                        speed = max(0.0, min(cap, speed))
+                        if speed > 0.5 and not logged_half:
+                            log("fans past 50%", t, smooth, pred)
+                            logged_half = True
+                        elif speed < 0.4:
+                            logged_half = False
                         if t >= MAX_AT and slope > 0 and speed >= MAX_FROM:
+                            if not full:
+                                log("fans at full speed", t, smooth, pred)
                             full = True
                         elif full and smooth < MAX_RELEASE:
                             full = False
