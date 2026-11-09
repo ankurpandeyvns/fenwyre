@@ -1,0 +1,121 @@
+#!/usr/bin/python3 -I
+"""window-memory: stores window positions reported by the windowmemory KWin script (kde-macos-parity).
+
+KWin 6.8 applies the position, size and maximize state of a "Remember" window rule when a window
+opens, but on Wayland it never saves them to ~/.config/kwinrulesrc. The KWin script calls Save()
+on net.local.WindowMemory with "class|x|y|width|height|maximizeMode|output"; this writes the values
+into the rule whose window class matches (only rules with positionrule=4, i.e. the apps the user
+chose), then has KWin reload the rules so the next window of that app opens there.
+"""
+import configparser, os, re, signal, subprocess
+import dbus, dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+RULES = os.path.expanduser("~/.config/kwinrulesrc")
+ENV = dict(os.environ, LC_ALL="C.UTF-8")   # kwriteconfig6 (Qt) warns on every call under a C locale
+REMEMBER = "4"
+FLUSH_MS = 1500   # writes and the KWin reload are batched
+
+
+def rule_groups():
+    cp = configparser.ConfigParser(interpolation=None, strict=False)
+    cp.optionxform = str
+    try:
+        cp.read(RULES)
+    except configparser.Error:
+        return []
+    return [(g, cp[g]) for g in cp.sections() if g != "General"]
+
+
+def matches(rule, cls):
+    want, how = rule.get("wmclass", ""), rule.get("wmclassmatch", "0")
+    if how == "1":
+        return cls == want
+    if how == "2":
+        return want in cls
+    if how == "3":
+        try:
+            return re.search(want, cls) is not None
+        except re.error:
+            return False
+    return False
+
+
+class Memory(dbus.service.Object):
+    def __init__(self, bus):
+        super().__init__(bus, "/net/local/WindowMemory")
+        self.pending = {}   # group -> {key: value}
+        self.timer = None
+
+    @dbus.service.method("net.local.WindowMemory", in_signature="s", out_signature="")
+    def Save(self, msg):
+        try:
+            cls, x, y, w, h, mode, _output = str(msg).split("|")
+            x, y, w, h, mode = (int(float(v)) for v in (x, y, w, h, mode))
+        except ValueError:
+            return
+        if w <= 0 or h <= 0:
+            return
+        for group, rule in rule_groups():
+            if rule.get("positionrule") != REMEMBER or not matches(rule, cls):
+                continue
+            vals = self.pending.setdefault(group, {})
+            # the top-left is always where the window is, so it reopens on the same screen; a
+            # maximized window keeps its restored size from before
+            vals["position"] = f"{x},{y}"
+            if rule.get("sizerule") == REMEMBER and mode == 0:
+                vals["size"] = f"{w},{h}"
+            if rule.get("maximizehorizrule") == REMEMBER:
+                vals["maximizehoriz"] = "true" if mode & 2 else "false"
+            if rule.get("maximizevertrule") == REMEMBER:
+                vals["maximizevert"] = "true" if mode & 1 else "false"
+            break
+        if self.pending and self.timer is None:
+            self.timer = GLib.timeout_add(FLUSH_MS, self.tick)
+
+    def tick(self):
+        self.timer = None
+        return self.flush()
+
+    def flush(self, reload=True):
+        if self.timer is not None:
+            GLib.source_remove(self.timer)
+        self.timer = None
+        pending, self.pending = self.pending, {}
+        for group, vals in pending.items():
+            for key, value in vals.items():
+                subprocess.run(["kwriteconfig6", "--file", "kwinrulesrc", "--group", group, "--key", key, value],
+                               check=False, env=ENV)
+        if not pending or not reload:
+            return False
+        try:   # reload the rules (a remembered position is only applied when a window opens)
+            dbus.SessionBus().call_blocking("org.kde.KWin", "/KWin", "org.kde.KWin", "reconfigure", "", [])
+        except dbus.DBusException:
+            pass
+        return False
+
+
+def main():
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    name = dbus.service.BusName("net.local.WindowMemory", bus, do_not_queue=True)
+    mem = Memory(bus)
+    loop = GLib.MainLoop()
+
+    def stop():   # logout/shutdown: write what the closing windows just reported
+        mem.flush(reload=False)
+        loop.quit()
+        return False
+    try:
+        from gi.repository import GLibUnix
+        add_signal = GLibUnix.signal_add
+    except ImportError:
+        add_signal = GLib.unix_signal_add
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        add_signal(GLib.PRIORITY_HIGH, sig, stop)
+    loop.run()
+
+
+if __name__ == "__main__":
+    main()

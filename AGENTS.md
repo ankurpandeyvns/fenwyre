@@ -144,7 +144,11 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
 - **windows**: create `~/.config/kwinrulesrc` rules, one per app the user chose, with
   `sizerule=4 positionrule=4 maximizehorizrule=4 maximizevertrule=4` (4 = Remember), matched on the window class
   (`w.resourceClass` from a KWin script; Chromium `--app` windows need a substring match). Apply with
-  `qdbus6 org.kde.KWin /KWin reconfigure`. Rules take effect from the next close/open.
+  `qdbus6 org.kde.KWin /KWin reconfigure`. Rules take effect from the next close/open. KWin 6.8 applies a
+  remembered position at open but never writes one on Wayland, so `unit_windows` installs the `windowmemory`
+  KWin script and `window-memory.service`: after a move, maximize, screen change or close they write `position`,
+  `size` and `maximizehoriz/vert` into the matching rule (only rules with `positionrule=4`). Verify: move a
+  window of a remembered app, wait 2 s, and its group in `kwinrulesrc` has the new `position`; reopen it there.
 
 **Final check**: no coredumps, no QML errors from `net.local.*` in the journal, plasmashell CPU ~5% at idle with a
 static wallpaper, every screenshot reviewed. Report per feature what was verified and what was not.

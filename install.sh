@@ -44,7 +44,7 @@ brightness|Apps|Brightness keys, ProMotion + DDC|Change only the display under t
 battery|System|Battery, fans + SSD TRIM|AlDente-style charge limit (default 80%); macOS fan profiles in Mac Stats > Sensors (fans off below 60 C; patched macsmc-hwmon, Asahi M1 Pro/Max); TRIM through the encrypted root (next boot)|yes
 audio|System|Bluetooth audio|LDAC adaptive bitrate (no skipping; hq option in the file); Sony Clear Bass-style EQ for a WH-1000XM3 (edit the target MAC)|no
 netstats|System|Per-app network/GPU + SF font|Root feeds for Mac Stats per-app network (packet capture) and GPU (scheduler tracepoints); SF Pro preferred over other sans fonts|yes
-windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size/position (agent creates them, see AGENTS.md)|no
+windows|System|Remember window sizes|Per-app KWin rules so apps reopen at their last size, position and screen (agent creates them, see AGENTS.md); a KWin script + user service record the positions|no
 '
 feature_units() {   # feature -> units, in no particular order (apply() orders and de-duplicates)
     case $1 in
@@ -322,7 +322,18 @@ unit_audio() {
     else echo "Sony EQ: set HEADSET_MAC=AA:BB:CC:DD:EE:FF (or edit $eq) to target your headset"; fi
     echo "Takes effect after: systemctl --user restart pipewire pipewire-pulse wireplumber (mute the speakers first)"
 }
-unit_windows() { echo "Window memory is created per app by the agent (AGENTS.md step 9); nothing to copy."; }
+unit_windows() {   # the per-app rules are created by the agent (AGENTS.md step 9); this records their positions
+    say "Window memory (KWin 6.8 never saves a Remember rule's position on Wayland)"
+    bin window-memory; svc window-memory.service
+    systemctl --user enable --now window-memory.service; systemctl --user restart window-memory.service
+    if kpackagetool6 --type KWin/Script --show windowmemory >/dev/null 2>&1; then
+        kpackagetool6 --type KWin/Script --upgrade "$HERE/kwin-scripts/windowmemory"
+    else
+        kpackagetool6 --type KWin/Script --install "$HERE/kwin-scripts/windowmemory"
+    fi
+    backup "$HOME/.config/kwinrc"; kw --file kwinrc --group Plugins --key windowmemoryEnabled true
+    qdbus6 org.kde.KWin /KWin reconfigure || true
+}
 unit_battery() {
     say "root: battery charge limit"
     sudo install -m755 "$HERE/system/bin/battery-limit" /usr/local/bin/battery-limit

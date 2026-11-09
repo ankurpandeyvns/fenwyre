@@ -1,0 +1,12 @@
+[Unit]
+Description=Window memory: store window positions in KWin's "Remember" rules
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/window-memory
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

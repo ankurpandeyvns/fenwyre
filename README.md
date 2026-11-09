@@ -92,7 +92,7 @@ Reboot into Plasma, then come back here. Notes from doing this on Omarchy:
 | Sony Clear Bass on LDAC | WH-1000XM3 ignores its own EQ on LDAC, so PipeWire applies a Clear Bass-style tune (−6 dB preamp, +6 dB low shelf at 120 Hz) as a smart filter in front of the headset only; hidden from output lists | `config/pipewire/60-sony-clearbass.conf` (edit `filter.smart.target` for your headset's `bluez_output.<MAC>.1`) |
 | Helium video (Apple silicon) | Hardware VA-API decode for H.264/VP9; an extension hides AV1 (no AV1 decoder on M1/M2) so YouTube uses hardware | `config/helium/` |
 | MX Keys in Mac mode | Logitech keyboards switched to macOS layout on every connect; the lock key (Ctrl+Cmd+Q) locks the screen | `bin/logi-macmode` (Solaar) |
-| Windows reopen where you left them | KWin "remember" rules per app | AGENTS.md step 9 |
+| Windows reopen where you left them | KWin "remember" rules per app, positions recorded by a KWin script (`window-memory`) | AGENTS.md step 9 |
 | Terminal | Konsole "Mac" profile, translucent dark scheme, Source Code Pro for Powerline | `config/konsole` |
 | Macintosh live wallpaper (Sequoia) | Susan Kare 1-bit scenes as tilted coloured pixel tiles that zoom, scroll and animate; Spectrum and 10 other colours; 10 scenes | `wallpapers/net.local.macintosh` |
 | Aerial wallpaper | Apple aerial videos via Smart Video Wallpaper Reborn | AGENTS.md step 11 |

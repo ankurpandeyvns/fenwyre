@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "windowmemory",
+        "Name": "Window memory",
+        "Description": "Reports where windows are moved, maximized or closed to the window-memory service, which stores it in the per-app \"Remember\" window rules",
+        "License": "MIT",
+        "EnabledByDefault": false
+    },
+    "KPackageStructure": "KWin/Script",
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}
