@@ -63,6 +63,13 @@ PlasmoidItem {
         if (v <= 0 && !sink.muted) sink.muted = true;
     }
 
+    function toggleMute() {   // unmuting at 0 % would stay silent: come back at 25 %
+        if (!sink) return;
+        if (!sink.muted) { sink.muted = true; return; }
+        sink.muted = false;
+        if (sink.volume <= 0) sink.volume = Math.round(0.25 * normalVolume);
+    }
+
     P5Support.DataSource { id: exec; engine: "executable"; connectedSources: []; onNewData: (s) => disconnectSource(s) }
     function openSettings() { root.expanded = false; exec.connectSource("systemsettings kcm_pulseaudio"); }
 
@@ -161,6 +168,8 @@ PlasmoidItem {
                 glyph: root.headphones ? "headphones" : "speaker"
                 value: root.sinkMuted ? 0 : root.volFrac
                 muted: root.sinkMuted
+                glyphToggles: true
+                onGlyphClicked: root.toggleMute()
                 onMoved: v => root.setVolume(v)
             }
             T11 { Layout.leftMargin: 10; Layout.topMargin: 2; Layout.bottomMargin: 2; text: "Output" }

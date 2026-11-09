@@ -328,6 +328,12 @@ PlasmoidItem {
         if (v > 0 && sink.muted) sink.muted = false;
         if (v === 0 && !sink.muted) sink.muted = true;
     }
+    function toggleMute() {   // unmuting at 0 % would stay silent: come back at 25 %
+        if (!sink) return;
+        if (!sink.muted) { sink.muted = true; return; }
+        sink.muted = false;
+        if (sink.volume <= 0) sink.volume = Math.round(0.25 * normalVolume);
+    }
     Vol.SinkModel { id: sinkModel }
 
     // ================================================================ Now Playing (MPRIS)
@@ -717,8 +723,10 @@ PlasmoidItem {
         property real value
         property bool muted: false
         property bool openable: true
+        property bool glyphToggles: false
         signal moved(real v)
         signal open()
+        signal glyphClicked()
         T13 {
             id: smTitle
             x: 14
@@ -755,6 +763,8 @@ PlasmoidItem {
             glyph: sm.glyph
             value: sm.value
             muted: sm.muted
+            glyphToggles: sm.glyphToggles
+            onGlyphClicked: sm.glyphClicked()
             onMoved: v => sm.moved(v)
         }
     }
@@ -1080,6 +1090,8 @@ PlasmoidItem {
                     glyph: root.headphones ? "headphones" : "speaker"
                     value: root.sinkMuted ? 0 : root.volFrac
                     muted: root.sinkMuted
+                    glyphToggles: true
+                    onGlyphClicked: root.toggleMute()
                     onMoved: v => root.setVolume(v)
                     onOpen: root.openPage("sound", mapToItem(pages, width / 2, height / 2))
                 }
@@ -1529,6 +1541,8 @@ PlasmoidItem {
                     glyph: root.headphones ? "headphones" : "speaker"
                     value: root.sinkMuted ? 0 : root.volFrac
                     muted: root.sinkMuted
+                    glyphToggles: true
+                    onGlyphClicked: root.toggleMute()
                     onMoved: v => root.setVolume(v)
                 }
                 SectionLabel { text: "Output" }

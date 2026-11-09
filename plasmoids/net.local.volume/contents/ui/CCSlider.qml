@@ -4,6 +4,7 @@ import QtQuick.Effects
 // macOS Control Center slider: thick pill track, white fill up to a round white knob,
 // symbol inside the track at the left that changes with the level.
 // Click anywhere jumps to that point; drag; scroll wheel steps 5 %.
+// glyphToggles: the symbol is a button (volume: mute/unmute, as in stock Plasma) and emits glyphClicked.
 Item {
     id: s
 
@@ -16,7 +17,9 @@ Item {
     property color fillColor: "#ffffff"
     property color iconColor: dark ? "#7c7c80" : "#8a8a8e"
 
+    property bool glyphToggles: false
     signal moved(real v)
+    signal glyphClicked()
 
     readonly property bool dragging: ma.pressed
     readonly property real knob: height
@@ -82,6 +85,16 @@ Item {
         autoPaddingEnabled: true
     }
 
+    Rectangle {   // hover/press highlight that marks the symbol as a button
+        visible: s.glyphToggles && (gma.containsMouse || gma.pressed)
+        width: s.height - 4
+        height: width
+        radius: width / 2
+        x: 2
+        anchors.verticalCenter: parent.verticalCenter
+        color: gma.pressed ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(0, 0, 0, 0.12)
+    }
+
     Glyph {
         kind: s.glyph
         level: s.shown
@@ -118,5 +131,17 @@ Item {
             if (d === 0) return;
             s.moved(s.clamp(s.value + (d > 0 ? s.step : -s.step)));
         }
+    }
+
+    MouseArea {   // above the track's MouseArea: the symbol toggles instead of setting the level
+        id: gma
+        visible: s.glyphToggles
+        x: 0
+        width: s.height + 4
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: s.glyphClicked()
     }
 }
