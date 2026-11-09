@@ -57,8 +57,9 @@ Use the **AskUserQuestion** tool for every choice below (not plain chat text), t
 ## Steps (per feature)
 
 Prerequisites, any selection: `./install.sh deps`, plus user-level installs as needed:
-- WhiteSur KDE (github.com/vinceliuice/WhiteSur-kde) Plasma style, colours, Aurorae decoration; WhiteSur icons and
-  cursors (`themes`, `menubar`).
+- WhiteSur KDE (github.com/vinceliuice/WhiteSur-kde) Plasma style, colours; WhiteSur icons and
+  cursors (`themes`, `menubar`). Title bars are Klassy, built and installed by `themes` (system/klassy):
+  WhiteSur's Aurorae decoration froze every display for ~0.4 s after each window resize.
 - SF Pro / SF Mono: AUR `apple-fonts` (its PKGBUILD may need `bsdtar` instead of `7z` on ARM; build locally).
 - Source Code Pro for Powerline (`konsole`): the `.otf` files from github.com/powerline/fonts/tree/master/SourceCodePro
   into `~/.local/share/fonts/SourceCodePro-Powerline/`, then `fc-cache -f`. Arch `powerline-fonts` lacks it.

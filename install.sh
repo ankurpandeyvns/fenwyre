@@ -147,6 +147,15 @@ unit_themesettings() {
     for f in kwinrc kdeglobals; do backup "$HOME/.config/$f"; done
     kw --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnLeft XIA
     kw --file kwinrc --group org.kde.kdecoration2 --key ButtonsOnRight ""
+    # Title bars: Klassy (native, macOS traffic lights, follows the colour scheme). WhiteSur's Aurorae theme
+    # froze every display for ~0.4 s after each resize (system/klassy/build-package); kept if Klassy can't be built.
+    if "$HERE/system/klassy/build-package"; then
+        put "$HERE/config/klassy/klassyrc" "$HOME/.config/klassy/klassyrc"
+        kw --file kwinrc --group org.kde.kdecoration2 --key library org.kde.klassy
+        kw --file kwinrc --group org.kde.kdecoration2 --key theme Klassy
+        kw --file kwinrc --group org.kde.kdecoration2 --key BorderSize None
+        kw --file kwinrc --group org.kde.kdecoration2 --key BorderSizeAuto false
+    else echo "Klassy not built: keeping the WhiteSur Aurorae title bars"; fi
     kw --file kdeglobals --group KDE --key DefaultLightLookAndFeel net.local.macos.light
     kw --file kdeglobals --group KDE --key DefaultDarkLookAndFeel net.local.macos.dark
     # Dock genie (~0.45 s like macOS): macgenie (system/genie, root) is KWin's Magic Lamp aimed at the dock

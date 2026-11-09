@@ -69,7 +69,7 @@ Reboot into Plasma, then come back here. Notes from doing this on Omarchy:
 | macOS | Here | How |
 |---|---|---|
 | Menu bar + Dock | Top panel (Apple logo launcher, global menu, tray, clock) and auto-hiding dock on every screen | Plasma panels |
-| Look | WhiteSur Plasma style, icons, cursors, window decoration, SF Pro / SF Mono fonts | WhiteSur (upstream), AUR `apple-fonts`, `config/fontconfig` |
+| Look | WhiteSur Plasma style, icons, cursors; Klassy title bars (traffic lights); SF Pro / SF Mono fonts | WhiteSur (upstream), `system/klassy`, `config/klassy`, AUR `apple-fonts`, `config/fontconfig` |
 | Genie minimize | Windows minimize into their app's icon in the dock on their own screen with the genie animation (~0.45 s), also a second window of an app that's already in the dock | `system/genie` (KWin's Magic Lamp, retargeted) |
 | Light / Dark switch | "macOS Light" / "macOS Dark" global themes that keep the macOS look | `look-and-feel/` |
 | Liquid Glass (27) | Dock, popups, menus and Spotlight are Liquid Glass: background refracted at the rounded bevel, light rim with specular highlight, clear dock, more tinted popups; menu-bar popups (Mac Stats, Control Center, battery, clock) are glass too; the menu bar is a faint 12% frosted veil (keeps white text readable; Plasma can't switch it to dark text the way macOS does); tints re-applied at every login | `system/glass/build-effect` ([kwin-effects-glass](https://github.com/4v3ngR/kwin-effects-glass)), `bin/plasma-sync-glass` |
@@ -152,6 +152,7 @@ docs/images/        README screenshots
   via Stephen Hackett's [512 Pixels](https://512pixels.net/2025/06/inside-macintosh-screen-saver/). Details in
   [wallpapers/net.local.macintosh/SOURCES.md](wallpapers/net.local.macintosh/SOURCES.md).
 - **Theme**: [WhiteSur](https://github.com/vinceliuice/WhiteSur-kde) by vinceliuice (installed from upstream, not bundled).
+- **Title bars**: [Klassy](https://github.com/paulmcauley/klassy) by Paul A McAuley (built from upstream by `system/klassy`, "Eaten Fruits" preset, opaque title bars).
 - **Fonts**: SF Pro / SF Mono from the AUR `apple-fonts` package (not bundled); Source Code Pro for Powerline.
 - **Lock screen**: based on Plasma's Breeze lock screen (GPL); fan driver patch on Asahi's `macsmc-hwmon` (GPL).
 - **Before screenshot**: Michio.kawaii, Wikimedia Commons, GPL.

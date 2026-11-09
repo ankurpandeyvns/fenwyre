@@ -1,0 +1,25 @@
+# Klassy for Fenwyre: the AUR PKGBUILD (Rocket Aaron) cut to Qt 6 only and allowed on aarch64; source and checksum unchanged.
+pkgname=klassy
+pkgver=6.7.3
+pkgrel=1
+pkgdesc='Highly customizable binary Window Decoration, Application Style and Global Theme plugin for KDE Plasma'
+arch=(x86_64 aarch64)
+url="https://github.com/paulmcauley/klassy"
+license=('GPL-2.0-only AND GPL-3.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT')
+depends=(breeze-icons hicolor-icon-theme frameworkintegration gcc-libs glibc kcmutils kcolorscheme kconfig
+         kcoreaddons kdecoration kguiaddons ki18n kiconthemes kwidgetsaddons kwindowsystem qt6-base
+         qt6-declarative qt6-svg xdg-utils)
+makedepends=(extra-cmake-modules)
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('a3e9b96723cda1b3c46d6f456d495e5e34d051940e6f71aa9a345e8fb850e1fb')
+
+build() {
+  cmake -B build -S "${pkgname}-${pkgver}" -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=OFF -DBUILD_QT5=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="${pkgdir}" cmake --install build
+  install -Dm644 "${pkgname}-${pkgver}/LICENSES/MIT.txt" "${pkgdir}/usr/share/licenses/${pkgname}/MIT.txt"
+}

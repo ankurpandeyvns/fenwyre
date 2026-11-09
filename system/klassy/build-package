@@ -1,0 +1,15 @@
+#!/bin/bash
+# Build and install Klassy (github.com/paulmcauley/klassy, GPL), the native window decoration that replaces
+# WhiteSur's Aurorae theme. Aurorae draws title bars through KSvg, which PNG-encodes/decodes its frame cache
+# on KWin's main thread after every window resize: every display froze for 340-470 ms (video stuttered too).
+# The PKGBUILD here is the AUR one cut down to Qt 6 and allowed on aarch64 (the AUR one is x86_64 + Qt 5).
+#   build-package          build and install with pacman (sudo); does nothing if this version is installed
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+want=$(sed -n 's/^pkgver=//p' "$here/PKGBUILD")
+[ "$(pacman -Q klassy 2>/dev/null | awk '{print $2}')" = "$want-1" ] && { echo "klassy $want already installed"; exit 0; }
+b=$(mktemp -d)
+trap 'rm -rf "$b"' EXIT
+cp "$here/PKGBUILD" "$b/"
+(cd "$b" && makepkg -s --noconfirm --needed >"$b/build.log" 2>&1) || { tail -20 "$b/build.log"; exit 1; }
+sudo pacman -U --noconfirm "$b"/klassy-"$want"-*.pkg.tar.*
