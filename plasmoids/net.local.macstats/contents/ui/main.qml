@@ -342,7 +342,7 @@ PlasmoidItem {
         spacing: Kirigami.Units.smallSpacing
         Kirigami.Icon {
             source: icon.startsWith("/") ? "file://" + icon : icon
-            fallback: "application-x-executable"
+            fallback: "exec"   // WhiteSur's application-x-executable is a dark square on the dark popup
             Layout.preferredWidth: Kirigami.Units.iconSizes.small
             Layout.preferredHeight: Kirigami.Units.iconSizes.small
         }
