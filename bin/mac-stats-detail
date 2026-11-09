@@ -169,35 +169,64 @@ ALIASES = {"plasma-kwin_wayland": ["KWin", "kwin"], "plasma-kwin_wayland_wrapper
            "pipewire-pulse": ["PipeWire", "audio-card"], "plasma-plasmashell": ["Plasma", "plasmashell"]}
 # Background services (systemd units) by readable name; the rest use the unit's Description when it
 # is short, else the program name. This setup's own daemons first, then common system ones.
-SERVICE_NAMES = {
-    "gpu-feed": "GPU Monitor", "nethogs-feed": "Network Monitor", "mac-fand": "Fan Control",
-    "battery-limit": "Battery Charge Limit", "kbd-backlight-dpms": "Keyboard Backlight",
-    "brightness-here-repeat": "Brightness Keys", "window-memory": "Window Memory",
-    "ddc-rescan": "Monitor Brightness", "logi-macmode": "Logitech Mac Mode",
-    "quicklook-nav": "Quick Look", "plasma-sync-glass": "Glass Sync",
-    "omarchy-asahi-mic": "Microphone Setup", "limine-snapper-sync": "Boot Snapshot Sync",
-    "systemd-journald": "System Log", "systemd-logind": "Login Manager", "systemd-udevd": "Device Manager",
-    "systemd-userdbd": "User Database", "systemd-timesyncd": "Time Sync", "systemd-oomd": "Memory Pressure Guard",
-    "systemd-resolved": "DNS Resolver", "dbus-broker": "D-Bus", "dbus": "D-Bus", "avahi-daemon": "Bonjour (Avahi)",
-    "bluetooth": "Bluetooth", "iwd": "Wi-Fi", "NetworkManager": "Network Manager", "tailscaled": "Tailscale",
-    "docker": "Docker", "containerd": "containerd", "polkit": "Authorization", "upower": "Power Status",
-    "udisks2": "Disk Manager", "speakersafetyd": "Speaker Protection", "power-profiles-daemon": "Power Profiles",
-    "iio-sensor-proxy": "Light Sensor", "sddm": "Login Screen", "accounts-daemon": "Accounts",
-    "rtkit-daemon": "Realtime Audio Scheduler", "gnome-keyring-daemon": "Keyring", "bt-agent": "Bluetooth Pairing",
-    "obex": "Bluetooth File Transfer", "dconf": "Settings Store", "gvfs-daemon": "Virtual File System",
-    "xdg-desktop-portal": "Desktop Portal", "xdg-document-portal": "Desktop Portal",
-    "xdg-permission-store": "Desktop Portal", "at-spi-dbus-bus": "Accessibility",
-    "plasma-ksmserver": "Session Manager", "plasma-powerdevil": "Power Management",
-    "plasma-kactivitymanagerd": "Activity Manager", "plasma-gmenudbusmenuproxy": "Global Menu",
-    "plasma-xembedsniproxy": "Tray Icon Bridge", "plasma-polkit-agent": "Authorization",
-    "plasma-kded6": "KDE Daemon", "nethogs": "Network Monitor",
-    "omarchy-audio-watchdog": "Audio Watchdog",
+SERVICE_NAMES = {   # unit -> [name, icon]
+    "gpu-feed": ["GPU Monitor", "nvidia-settings"], "nethogs-feed": ["Network Monitor", "utilities-system-monitor"],
+    "nethogs": ["Network Monitor", "utilities-system-monitor"], "mac-fand": ["Fan Control", "psensor"],
+    "battery-limit": ["Battery Charge Limit", "battery"], "kbd-backlight-dpms": ["Keyboard Backlight", "keyboard"],
+    "brightness-here-repeat": ["Brightness Keys", "display-brightness"],
+    "window-memory": ["Window Memory", "preferences-system-windows"],
+    "ddc-rescan": ["Monitor Brightness", "video-display"], "logi-macmode": ["Logitech Mac Mode", "solaar"],
+    "quicklook-nav": ["Quick Look", "accessories-image-viewer"],
+    "plasma-sync-glass": ["Glass Sync", "preferences-desktop-theme"],
+    "omarchy-asahi-mic": ["Microphone Setup", "audio-input-microphone"],
+    "omarchy-audio-watchdog": ["Audio Watchdog", "audio-card"],
+    "limine-snapper-sync": ["Boot Snapshot Sync", "timeshift"],
+    "systemd-journald": ["System Log", "logviewer"], "systemd-logind": ["Login Manager", "system-users"],
+    "systemd-udevd": ["Device Manager", "hardinfo"], "systemd-userdbd": ["User Database", "system-users"],
+    "systemd-timesyncd": ["Time Sync", "gnome-clocks"], "systemd-oomd": ["Memory Pressure Guard", "memory"],
+    "systemd-resolved": ["DNS Resolver", "network-server"], "dbus-broker": ["D-Bus", "qdbusviewer"],
+    "dbus": ["D-Bus", "qdbusviewer"], "avahi-daemon": ["Bonjour (Avahi)", "network-workgroup"],
+    "bluetooth": ["Bluetooth", "bluetooth"], "bt-agent": ["Bluetooth Pairing", "bluetooth"],
+    "obex": ["Bluetooth File Transfer", "bluetooth"], "iwd": ["Wi-Fi", "network-wireless"],
+    "NetworkManager": ["Network Manager", "preferences-system-network"], "tailscaled": ["Tailscale", "network-vpn"],
+    "docker": ["Docker", "docker"], "containerd": ["containerd", "docker"],
+    "polkit": ["Authorization", "preferences-system-privacy"],
+    "plasma-polkit-agent": ["Authorization", "preferences-system-privacy"],
+    "upower": ["Power Status", "battery"], "udisks2": ["Disk Manager", "gnome-disks"],
+    "speakersafetyd": ["Speaker Protection", "audio-speakers"],
+    "power-profiles-daemon": ["Power Profiles", "preferences-system-power-management"],
+    "iio-sensor-proxy": ["Light Sensor", "display-brightness"], "sddm": ["Login Screen", "preferences-system-login"],
+    "accounts-daemon": ["Accounts", "user-info"], "rtkit-daemon": ["Realtime Audio Scheduler", "audio-card"],
+    "gnome-keyring-daemon": ["Keyring", "seahorse"], "dconf": ["Settings Store", "dconf-editor"],
+    "gvfs-daemon": ["Virtual File System", "system-file-manager"],
+    "xdg-desktop-portal": ["Desktop Portal", "preferences-desktop"],
+    "xdg-document-portal": ["Desktop Portal", "preferences-desktop"],
+    "xdg-permission-store": ["Desktop Portal", "preferences-desktop"],
+    "at-spi-dbus-bus": ["Accessibility", "preferences-desktop-accessibility"],
+    "plasma-kaccess": ["Accessibility", "preferences-desktop-accessibility"],
+    "plasma-ksmserver": ["Session Manager", "preferences-system-session"],
+    "plasma-powerdevil": ["Power Management", "preferences-system-power-management"],
+    "plasma-kactivitymanagerd": ["Activity Manager", "preferences-activities"],
+    "plasma-gmenudbusmenuproxy": ["Global Menu", "kmenuedit"],
+    "plasma-xembedsniproxy": ["Tray Icon Bridge", "preferences-desktop-notification"],
+    "plasma-kded6": ["KDE Daemon", "kde"],
+    "plasma-knighttimed": ["Night Light", "preferences-desktop-display-nightcolor"],
+}
+# Icons for common programs that run without an app or a named service around them.
+PROGRAM_ICONS = {
+    "ssh": "network-server", "sshd": "network-server", "cloudflared": "network-vpn", "tailscale": "network-vpn",
+    "zsh": "utilities-terminal", "bash": "utilities-terminal", "sh": "utilities-terminal", "dash": "utilities-terminal",
+    "fish": "utilities-terminal", "sleep": "gnome-clocks", "git": "git", "make": "applications-development",
+    "cargo": "applications-development", "docker": "docker", "curl": "network-server",
 }
 # Programs outside a named service (PID 1, login plumbing, D-Bus-activated helpers), by executable.
 PROGRAM_NAMES = {
-    "systemd": "Service Manager", "systemd-udevd": "Device Manager", "sddm-helper": "Login Screen",
-    "(sd-pam)": "Login Session", "startplasma-wayland": "Plasma Startup", "startplasma-way": "Plasma Startup",
-    "gnome-keyring-daemon": "Keyring", "at-spi2-registryd": "Accessibility", "at-spi-bus-launcher": "Accessibility",
+    "systemd": ["Service Manager", "preferences-system"], "systemd-udevd": ["Device Manager", "hardinfo"],
+    "sddm-helper": ["Login Screen", "preferences-system-login"], "(sd-pam)": ["Login Session", "system-users"],
+    "startplasma-wayland": ["Plasma Startup", "plasmashell"], "startplasma-way": ["Plasma Startup", "plasmashell"],
+    "gnome-keyring-daemon": ["Keyring", "seahorse"],
+    "at-spi2-registryd": ["Accessibility", "preferences-desktop-accessibility"],
+    "at-spi-bus-launcher": ["Accessibility", "preferences-desktop-accessibility"],
 }
 # Command-line programs with their own icon (by executable, process name or script name).
 CLI_APPS = {"claude": ["Claude Code", "claude"], "codex": ["Codex", "codex-desktop"],
@@ -253,15 +282,18 @@ def label(key, leader, scope, comm, pid, idx):
             if n in CLI_APPS:
                 return CLI_APPS[n]
         if comm in PROGRAM_NAMES or exe in PROGRAM_NAMES:
-            return [PROGRAM_NAMES.get(exe) or PROGRAM_NAMES[comm], SERVICE_ICON]
+            return list(PROGRAM_NAMES.get(exe) or PROGRAM_NAMES[comm])
         if script:
             return [script, "python" if exe.startswith("python") or comm.startswith("python") else "utilities-terminal"]
         name = exe if len(comm) >= 15 and exe.startswith(comm) else comm   # comm is cut at 15 chars
-        return [name, "utilities-terminal"]
+        hit = lookup(idx, exe, comm)
+        if hit and hit[1] != "application-x-executable":
+            return hit
+        return [name, PROGRAM_ICONS.get(exe) or PROGRAM_ICONS.get(comm) or "utilities-terminal"]
     if scope in ALIASES:
         return ALIASES[scope]
     if key.startswith("svc:") and scope in SERVICE_NAMES:
-        return [SERVICE_NAMES[scope], SERVICE_ICON]
+        return list(SERVICE_NAMES[scope])
     cands = []
     if leader:
         cands += [exe_of(leader), rd(f"/proc/{leader}/comm").strip()]
@@ -276,7 +308,13 @@ def label(key, leader, scope, comm, pid, idx):
         return hit
     if key.startswith("svc:"):
         exe = exe_of(pid)
-        return [PROGRAM_NAMES.get(exe) or unit_name(scope) or script_of(pid) or exe or comm, SERVICE_ICON]
+        if exe in PROGRAM_NAMES:
+            return list(PROGRAM_NAMES[exe])
+        unit = unit_name(scope)
+        if unit:
+            return [unit, SERVICE_ICON]
+        name = script_of(pid) or exe or comm
+        return [name, PROGRAM_ICONS.get(exe) or PROGRAM_ICONS.get(comm) or SERVICE_ICON]
     return [script_of(pid) or exe_of(pid) or comm, UNKNOWN_ICON]
 
 
