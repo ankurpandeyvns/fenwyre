@@ -6,7 +6,7 @@
 const SETTLE_MS = 3000;   // ignore the opening placement (rules, maximize at open)
 const opened = new Map();
 
-function report(w) {
+function report(w, closing) {
     if (!w || !w.normalWindow || w.transient || w.fullScreen || w.minimized || !w.resourceClass) {
         return;
     }
@@ -15,7 +15,7 @@ function report(w) {
     }
     const g = w.frameGeometry;
     const msg = [w.resourceClass, Math.round(g.x), Math.round(g.y), Math.round(g.width), Math.round(g.height),
-                 w.maximizeMode, w.output ? w.output.name : ""].join("|");
+                 w.maximizeMode, w.output ? w.output.name : "", closing ? 1 : 0].join("|");
     callDBus("net.local.WindowMemory", "/net/local/WindowMemory", "net.local.WindowMemory", "Save", msg);
 }
 
@@ -28,4 +28,4 @@ function watch(w, isNew) {
 
 workspace.windowList().forEach(w => watch(w, false));
 workspace.windowAdded.connect(w => watch(w, true));
-workspace.windowRemoved.connect(w => { report(w); opened.delete(w); });
+workspace.windowRemoved.connect(w => { report(w, true); opened.delete(w); });

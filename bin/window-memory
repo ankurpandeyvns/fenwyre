@@ -3,9 +3,10 @@
 
 KWin 6.8 applies the position, size and maximize state of a "Remember" window rule when a window
 opens, but on Wayland it never saves them to ~/.config/kwinrulesrc. The KWin script calls Save()
-on net.local.WindowMemory with "class|x|y|width|height|maximizeMode|output"; this writes the values
-into the rule whose window class matches (only rules with positionrule=4, i.e. the apps the user
-chose), then has KWin reload the rules so the next window of that app opens there.
+on net.local.WindowMemory with "class|x|y|width|height|maximizeMode|output|closing"; this writes the
+values into the rule whose window class matches (only rules with positionrule=4, i.e. the apps the
+user chose). KWin only reads them when a window opens, so it reloads its rules only after a window
+closes: a reload also reconfigures every effect, which stutters a window that is being dragged.
 """
 import configparser, os, re, signal, subprocess
 import dbus, dbus.service
@@ -46,13 +47,15 @@ class Memory(dbus.service.Object):
     def __init__(self, bus):
         super().__init__(bus, "/net/local/WindowMemory")
         self.pending = {}   # group -> {key: value}
+        self.reload = False
         self.timer = None
 
     @dbus.service.method("net.local.WindowMemory", in_signature="s", out_signature="")
     def Save(self, msg):
         try:
-            cls, x, y, w, h, mode, _output = str(msg).split("|")
+            cls, x, y, w, h, mode, _output, *rest = str(msg).split("|")
             x, y, w, h, mode = (int(float(v)) for v in (x, y, w, h, mode))
+            closing = bool(rest) and rest[0] == "1"
         except ValueError:
             return
         if w <= 0 or h <= 0:
@@ -70,6 +73,7 @@ class Memory(dbus.service.Object):
                 vals["maximizehoriz"] = "true" if mode & 2 else "false"
             if rule.get("maximizevertrule") == REMEMBER:
                 vals["maximizevert"] = "true" if mode & 1 else "false"
+            self.reload = self.reload or closing
             break
         if self.pending and self.timer is None:
             self.timer = GLib.timeout_add(FLUSH_MS, self.tick)
@@ -83,13 +87,14 @@ class Memory(dbus.service.Object):
             GLib.source_remove(self.timer)
         self.timer = None
         pending, self.pending = self.pending, {}
+        want_reload, self.reload = self.reload, False
         for group, vals in pending.items():
             for key, value in vals.items():
                 subprocess.run(["kwriteconfig6", "--file", "kwinrulesrc", "--group", group, "--key", key, value],
                                check=False, env=ENV)
-        if not pending or not reload:
+        if not pending or not reload or not want_reload:
             return False
-        try:   # reload the rules (a remembered position is only applied when a window opens)
+        try:   # reload the rules for the next window of that app (not after moves: see the docstring)
             dbus.SessionBus().call_blocking("org.kde.KWin", "/KWin", "org.kde.KWin", "reconfigure", "", [])
         except dbus.DBusException:
             pass
