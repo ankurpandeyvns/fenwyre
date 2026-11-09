@@ -14,7 +14,10 @@ import net.local.blur as Blur
 PlasmoidItem {
     id: root
 
-    preferredRepresentation: compactRepresentation
+    // Inline in the menu bar (zero width), so Plasma never opens its panel popup for this applet: with a
+    // compact representation, every other Cmd+Space opened that empty popup (a dark 541x390 box under the
+    // menu bar). The real UI is the overlay window below.
+    preferredRepresentation: fullRepresentation
     activationTogglesExpanded: false
 
     readonly property int panelWidth: 680
@@ -76,8 +79,11 @@ PlasmoidItem {
         }
     }
 
-    // Plasma creates no panel button without a full representation; the real UI is the overlay window.
-    fullRepresentation: Item {}
+    fullRepresentation: Item {
+        Layout.minimumWidth: 0
+        Layout.preferredWidth: 0
+        Layout.maximumWidth: 0
+    }
 
     Milou.ResultsModel {
         id: searchModel
