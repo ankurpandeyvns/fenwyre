@@ -114,6 +114,34 @@ def exe_of(pid):
         return ""
 
 
+# Kernel threads by what they work on. A kworker is named after the work queue it last ran
+# ("kworker/u43:7-kcryptd-252:1-2"), so its share moves between categories as its work changes.
+KERNEL_CATEGORIES = [   # (pattern on the thread/work-queue name, name, icon); first match wins
+    (r"dmcrypt|kcryptd", "Disk Encryption", "security-high"),
+    (r"btrfs|jbd|ext4|xfs|f2fs|writeback|flush|kblockd|blk|nvme|apple-ans|scsi|loop\d|zram|mmc", "Disk I/O", "drive-harddisk"),
+    (r"asahi|drm|dcp|afk|gpu|disp|hdmi|\bavd", "Graphics & Display", "video-display"),
+    (r"tas27|snd|sound|audio|cs42l|mca", "Audio", "audio-card"),
+    (r"brcmf|wlan|wifi|80211|net|ipv6|addrconf|wg-|bluetooth|\bhci|rfcomm", "Network & Bluetooth", "network-wireless"),
+    (r"usb|xhci|dwc3|typec|tps659|thunderbolt|\batc", "USB & Thunderbolt", "drive-removable-media-usb"),
+    (r"kswapd|kcompactd|ksmd|oom_reaper|mm_percpu|zswap|khugepaged|psimon|vmstat", "Memory Management", "memory"),
+    (r"^irq/|ksoftirqd", "Interrupts", "cpu"),
+]
+KERNEL_OTHER = ["Kernel", "computer-laptop"]
+
+
+def kernel_category(comm):
+    work = comm.split("-", 1)[1] if comm.startswith("kworker/") and "-" in comm else comm
+    for i, (pat, _, _) in enumerate(KERNEL_CATEGORIES):
+        if re.search(pat, work, re.I):
+            return str(i)
+    return "other"
+
+
+def same_process(old, new):
+    """The same process in two samples: its name is unchanged, or it is a kworker that ran other work."""
+    return old == new or (old.startswith("kworker/") and old.split("-", 1)[0] == new.split("-", 1)[0])
+
+
 def unesc(unit):
     """systemd unit-name escapes: app-orca\\x2dide -> app-orca-ide."""
     return re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), unit)
@@ -123,7 +151,7 @@ def group_of(pid, comm, cache):
     """(key, leader pid, scope id) — whole apps by their systemd app scope, terminal commands alone."""
     cg = unesc(rd(f"/proc/{pid}/cgroup").strip().split("::", 1)[-1])
     if not cg or cg == "/":
-        return ("kernel", None, None)
+        return ("kernel:" + kernel_category(comm), None, None)
     if "/tab(" in cg or "/main.scope" in cg and "konsole" not in cg:
         return ("cmd:" + comm, pid, None)
     m = re.search(r"/app-([^/]+?)(?:-(\d+))?\.scope", cg) or re.search(r"/app-([^/@]+?)(?:@[^/]*)?\.service", cg)
@@ -171,6 +199,9 @@ PROGRAM_NAMES = {
     "(sd-pam)": "Login Session", "startplasma-wayland": "Plasma Startup", "startplasma-way": "Plasma Startup",
     "gnome-keyring-daemon": "Keyring", "at-spi2-registryd": "Accessibility", "at-spi-bus-launcher": "Accessibility",
 }
+# Command-line programs with their own icon (by executable, process name or script name).
+CLI_APPS = {"claude": ["Claude Code", "claude"], "codex": ["Codex", "codex-desktop"],
+            "codex.js": ["Codex", "codex-desktop"]}
 SERVICE_ICON = "preferences-system"
 UNKNOWN_ICON = "exec"   # WhiteSur's application-x-executable is a dark grey square, invisible on the popup
 INTERPRETERS = re.compile(r"(python[0-9.]*|bash|sh|dash|perl|ruby|node)")
@@ -212,13 +243,17 @@ def unit_name(unit):
 
 
 def label(key, leader, scope, comm, pid, idx):
-    if key == "kernel":
-        return ["Kernel", "computer-laptop"]
+    if key.startswith("kernel:"):
+        cat = key.split(":", 1)[1]
+        return KERNEL_OTHER if cat == "other" else list(KERNEL_CATEGORIES[int(cat)][1:])
     if key.startswith("cmd:"):
         exe = exe_of(pid)
+        script = script_of(pid)
+        for n in (exe, comm, script):
+            if n in CLI_APPS:
+                return CLI_APPS[n]
         if comm in PROGRAM_NAMES or exe in PROGRAM_NAMES:
             return [PROGRAM_NAMES.get(exe) or PROGRAM_NAMES[comm], SERVICE_ICON]
-        script = script_of(pid)
         if script:
             return [script, "python" if exe.startswith("python") or comm.startswith("python") else "utilities-terminal"]
         name = exe if len(comm) >= 15 and exe.startswith(comm) else comm   # comm is cut at 15 chars
@@ -389,7 +424,7 @@ def sample():
             labels.setdefault(lb[0], lb)
         key = resolved[key]
         mem_by[key] = mem_by.get(key, 0) + rss
-        if dt and pid in pp and pp[pid][0] == comm:
+        if dt and pid in pp and same_process(pp[pid][0], comm):
             c = 100 * (ticks - pp[pid][1]) / CLK / dt
             if c > 0:
                 cpu_by[key] = cpu_by.get(key, 0) + c
