@@ -92,8 +92,11 @@ Verify: `plasma-apply-lookandfeel -l` lists WhiteSur; `fc-list | grep -i "SF Pro
   each screen. Set `panelOpacity=1` per top panel in `~/.config/plasmashellrc` (`[PlasmaViews][Panel N]`) while
   plasmashell is stopped. `addWidget` appends; to put Mac Stats, battery, Sound, Control Center (and Spotlight) left
   of the clock, stop plasmashell, edit `AppletOrder=` in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`,
-  start it. Verify with a screenshot of each bar: Apple logo top-left, no chevron, headphones glyph when a headset
-  is the output.
+  start it. `unit_layout` passes each screen's logical px/inch and notch state (from `kscreen-doctor -j` and
+  `/sys/module/appledrm/parameters/show_notch`): the clock is `min(10, round(864 / ppi))` pt (10 on desktop
+  monitors, 7 on the 14" MacBook) and the bar on the notched built-in display is 32 px. Verify with a screenshot of
+  each bar: Apple logo top-left, no chevron, headphones glyph when a headset is the output, clock text the same
+  height on every screen.
 - **lockscreen**: lock screen UI takes effect at the next login. Verify with `loginctl lock-session` /
   `unlock-session` (never `kscreenlocker_greet --testing` while the user is typing: it takes their keystrokes).
   The wallpaper: `contents/ui/Machine.js` interprets the `.program` scene DSL (`programs/apple/` are Apple's,

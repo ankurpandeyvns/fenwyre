@@ -432,7 +432,26 @@ unit_layout() {
     [[ " ${SELECTED[*]} " == *" menubar "* ]] && want+=('"net.local.macstats"' '"org.kde.plasma.battery"' '"net.local.volume"' '"net.local.controlcenter"')
     [[ " ${SELECTED[*]} " == *" spotlight "* ]] && want+=('"net.local.spotlight"')
     local list; list=$(IFS=,; echo "${want[*]}")
+    # Per-screen logical density and notch, for clock size and bar height (Plasma scripting can't see mm).
+    local notch=N; [ -r /sys/module/appledrm/parameters/show_notch ] && notch=$(cat /sys/module/appledrm/parameters/show_notch)
+    local screens; screens=$(kscreen-doctor -j 2>/dev/null | NOTCH="$notch" python3 -I -c 'import json,os,sys
+try: outs=[o for o in json.load(sys.stdin)["outputs"] if o.get("enabled")]
+except Exception: outs=[]
+rows=[]
+for o in outs:
+    m=next((x for x in o.get("modes",[]) if x.get("id")==o.get("currentModeId")),None)
+    if not m or not o.get("sizeMM",{}).get("width"): continue
+    w,h=m["size"]["width"],m["size"]["height"]; mw,mh=o["sizeMM"]["width"],o["sizeMM"]["height"]
+    if o.get("rotation") in (2,8): w,h,mw,mh=h,w,mh,mw
+    sc=o.get("scale") or 1
+    rows.append(dict(x=o["pos"]["x"],y=o["pos"]["y"],w=round(w/sc),ppi=round(w/sc/(mw/25.4),1),
+                     notch=o["name"].startswith("eDP") and os.environ.get("NOTCH")=="Y"))
+if rows:
+    x0=min(r["x"] for r in rows); y0=min(r["y"] for r in rows)
+    for r in rows: r["x"]-=x0; r["y"]-=y0
+print(json.dumps(rows))') || screens='[]'
     plasma_js "var WANT = [$list];
+var SCREENS = ${screens:-[]};
 $(cat "$HERE/plasma-scripts/mac-layout.js")"
 }
 unit_restart() { say "restart plasmashell"; systemctl --user restart plasma-plasmashell.service; }
